@@ -4,6 +4,6 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "jsx": "react-jsx",
-    "types": ["expo"]
+    "types": ["react", "react-native", "expo"]
   }
 }
