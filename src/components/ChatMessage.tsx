@@ -4,7 +4,7 @@ import { View, Text, StyleSheet } from "react-native";
 
 
 
-export default function ChatMessage({ msg }: { msg: { text: string; createdAt: number; sender: "user" | "ai"; stress?: number; tags?: string[] } }) {
+export default function ChatMessage({ msg }: { msg: { text: string; createdAt: number; sender: "user" | "assistant"; stress?: number; tags?: string[] } }) {
   const isUser = msg.sender === "user";
   return (
     <View style={[styles.bubble, isUser ? styles.user : styles.ai]}>
