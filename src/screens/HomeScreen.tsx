@@ -14,6 +14,7 @@ import { Message } from "../types";
 import { chatWithAI, ChatMsg } from "../lib/ai";
 import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
 import StressTagInput from "../../src/components/StressTagInput";
+import { BACKEND_URL } from "../lib/ai";
 
 export default function HomeScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -52,80 +53,71 @@ export default function HomeScreen() {
     });
   }
 
-  // Convert your local messages to the ChatMsg[] expected by the backend.
-  function toChatMsgs(ms: Message[]): ChatMsg[] {
-    // Optional: include a system primer as the first message.
-    const system: ChatMsg = {
-      role: "system",
-      content:
-        "You are a concise, supportive companion. Be validating, practical, and brief. When user mentions stress or tags, use them to tailor the response."
-    };
-    const rest = ms.map<ChatMsg>(m => ({
-      role: m.sender === "assistant" ? "assistant" : "user",
-      content: m.text
-    }));
-    return [system, ...rest];
-  }
+// inside HomeScreen component
 
-  async function send() {
-    const trimmed = text.trim();
-    if (!trimmed || loading) return;
+function toChatMsgs(ms: Message[]) {
+  const system = {
+    role: "system" as const,
+    content:
+      "You are a concise, supportive companion. Be validating, practical, and brief."
+  };
+  const rest = ms.map(m => ({
+    role: m.sender === "assistant" ? ("assistant" as const) : ("user" as const),
+    content: m.text
+  }));
+  return [system, ...rest];
+}
 
-    setErrorText(null);
+async function send() {
+  const trimmed = text.trim();
+  if (!trimmed) return;
 
-    // 1) append user message locally
-    const userMsg: Message = {
+  setErrorText(null);
+
+  const userMsg: Message = {
+    id: Math.random().toString(36).slice(2),
+    text: trimmed,
+    sender: "user",
+    createdAt: Date.now()
+  };
+
+  const next = [...messages, userMsg];
+  setMessages(next);
+  setText("");
+  await saveMessages(next);
+
+  setLoading(true);
+  try {
+    // optionally pass most recent stress as mood
+    const lastStress = [...next].reverse().find(
+      m => m.sender === "user" && typeof (m as any).stress === "number"
+    ) as (Message & { stress?: number }) | undefined;
+
+    const reply = await chatWithAI(toChatMsgs(next), lastStress?.stress);
+    const aiMsg: Message = {
       id: Math.random().toString(36).slice(2),
-      text: trimmed,
-      sender: "user",
+      text: reply,
+      sender: "assistant", // your app uses "ai" (mapped to assistant above)
       createdAt: Date.now()
     };
-    lastUserMsgId.current = userMsg.id;
-
-    const next = [...messages, userMsg];
-    setMessages(next);
-    setText("");
-    await saveMessages(next);
-
-    // 2) call backend
-    setLoading(true);
-    try {
-      // Try to pass the most recent self-reported stress level, if present
-      // (We scan from the end for the last user msg that has stress recorded)
-      const lastStressCarrier = [...next].reverse().find(
-        m => m.sender === "user" && typeof (m as any).stress === "number"
-      ) as (Message & { stress?: number }) | undefined;
-
-      const mood = lastStressCarrier?.stress; // number | undefined
-
-      const replyText = await chatWithAI(toChatMsgs(next), mood);
-
-      // 3) append assistant reply
-      const aiMsg: Message = {
-        id: Math.random().toString(36).slice(2),
-        text: replyText,
-        sender: "assistant",
-        createdAt: Date.now()
-      };
-      const finalList = [...next, aiMsg];
-      setMessages(finalList);
-      await saveMessages(finalList);
-    } catch (e: any) {
-      setErrorText("Hmm, I couldn’t reach the AI right now. Please try again.");
-      // Optionally append a soft failure message for UX continuity:
-      const failMsg: Message = {
-        id: Math.random().toString(36).slice(2),
-        text: "I hit a snag talking to the server. Mind trying again in a moment?",
-        sender: "assistant",
-        createdAt: Date.now()
-      };
-      const finalList = [...next, failMsg];
-      setMessages(finalList);
-      await saveMessages(finalList);
-    } finally {
-      setLoading(false);
-    }
+    const finalList = [...next, aiMsg];
+    setMessages(finalList);
+    await saveMessages(finalList);
+  } catch (e: any) {
+    setErrorText(String(e?.message || e));
+    const failMsg: Message = {
+      id: Math.random().toString(36).slice(2),
+      text: "I couldn’t reach the AI just now. Please try again.",
+      sender: "assistant",
+      createdAt: Date.now()
+    };
+    const finalList = [...next, failMsg];
+    setMessages(finalList);
+    await saveMessages(finalList);
+  } finally {
+    setLoading(false);
   }
+}
 
   return (
     <KeyboardAvoidingView
@@ -134,7 +126,7 @@ export default function HomeScreen() {
       keyboardVerticalOffset={90}
     >
       <View style={styles.container}>
-        <Text style={styles.title}>CalmSketch — Chat</Text>
+        <Text style={styles.title}>Stress Less — Chat</Text>
 
         {!!errorText && (
           <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
@@ -159,6 +151,26 @@ export default function HomeScreen() {
             editable={!loading}
           />
           <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
+          {/* DEBUG PANEL — remove later */}
+<View style={{ marginTop: 8, padding: 8, backgroundColor: "#f6f6f6", borderRadius: 8 }}>
+  <Text style={{ fontSize: 12, color: "#666" }}>Backend: {BACKEND_URL}</Text>
+  <Button
+    title="Test /api/health"
+    onPress={async () => {
+      try {
+        const r = await fetch(`${BACKEND_URL}/api/health`);
+        const t = await r.text();
+        alert(`health: ${r.status} ${t}`);
+      } catch (e: any) {
+        alert(`health failed: ${String(e)}`);
+      }
+    }}
+  />
+  {errorText ? (
+    <Text style={{ color: "crimson", marginTop: 6 }}>Last error: {errorText}</Text>
+  ) : null}
+</View>
+
         </View>
 
         <View style={{ marginTop: 8 }}>
