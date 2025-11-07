@@ -7,14 +7,16 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  StyleSheet
+  StyleSheet,
+  ActivityIndicator
 } from "react-native";
 import ChatMessage from "../../src/components/ChatMessage";
 import { Message } from "../types";
 import { chatWithAI, ChatMsg } from "../lib/ai";
 import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
 import StressTagInput from "../../src/components/StressTagInput";
-import { BACKEND_URL } from "../lib/ai";
+
+const FALLBACK = "I hit a snag talking to the server. Mind trying again in a moment?";
 
 export default function HomeScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -23,6 +25,7 @@ export default function HomeScreen() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const lastUserMsgId = useRef<string | null>(null);
 
+  // Load/persist messages for metrics, but we won't render the full history.
   useEffect(() => {
     (async () => {
       const initial = await loadMessages();
@@ -30,7 +33,27 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // ---- attachStress must be top-level (not nested inside send)
+  // Map your internal Message[] → backend ChatMsg[] (drop fallback lines, trim history)
+  function toChatMsgs(ms: Message[]): ChatMsg[] {
+    const system: ChatMsg = {
+      role: "system",
+      content:
+        "You are a concise, supportive companion. Be validating, practical, and brief."
+    };
+
+    const rest: ChatMsg[] = ms
+      // remove our old fallback replies so they don't pollute context
+      .filter(m => !(m.sender === "assistant" && m.text === FALLBACK))
+      .map<ChatMsg>(m => ({
+        role: m.sender === "assistant" ? "assistant" : "user",
+        content: m.text
+      }));
+
+    // keep the last 12 total (system + tail) to keep prompt small
+    const tail = rest.slice(-12);
+    return [system, ...tail];
+  }
+
   async function attachStress({ stress, tags }: { stress: number; tags: string[] }) {
     if (!messages.length) return;
 
@@ -53,71 +76,68 @@ export default function HomeScreen() {
     });
   }
 
-// inside HomeScreen component
+  async function send() {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
 
-function toChatMsgs(ms: Message[]) {
-  const system = {
-    role: "system" as const,
-    content:
-      "You are a concise, supportive companion. Be validating, practical, and brief."
-  };
-  const rest = ms.map(m => ({
-    role: m.sender === "assistant" ? ("assistant" as const) : ("user" as const),
-    content: m.text
-  }));
-  return [system, ...rest];
-}
+    setErrorText(null);
 
-async function send() {
-  const trimmed = text.trim();
-  if (!trimmed) return;
-
-  setErrorText(null);
-
-  const userMsg: Message = {
-    id: Math.random().toString(36).slice(2),
-    text: trimmed,
-    sender: "user",
-    createdAt: Date.now()
-  };
-
-  const next = [...messages, userMsg];
-  setMessages(next);
-  setText("");
-  await saveMessages(next);
-
-  setLoading(true);
-  try {
-    // optionally pass most recent stress as mood
-    const lastStress = [...next].reverse().find(
-      m => m.sender === "user" && typeof (m as any).stress === "number"
-    ) as (Message & { stress?: number }) | undefined;
-
-    const reply = await chatWithAI(toChatMsgs(next), lastStress?.stress);
-    const aiMsg: Message = {
+    // 1) append user message locally
+    const userMsg: Message = {
       id: Math.random().toString(36).slice(2),
-      text: reply,
-      sender: "assistant", // your app uses "ai" (mapped to assistant above)
+      text: trimmed,
+      sender: "user",
       createdAt: Date.now()
     };
-    const finalList = [...next, aiMsg];
-    setMessages(finalList);
-    await saveMessages(finalList);
-  } catch (e: any) {
-    setErrorText(String(e?.message || e));
-    const failMsg: Message = {
-      id: Math.random().toString(36).slice(2),
-      text: "I couldn’t reach the AI just now. Please try again.",
-      sender: "assistant",
-      createdAt: Date.now()
-    };
-    const finalList = [...next, failMsg];
-    setMessages(finalList);
-    await saveMessages(finalList);
-  } finally {
-    setLoading(false);
+    lastUserMsgId.current = userMsg.id;
+
+    const next = [...messages, userMsg];
+    setMessages(next);
+    setText("");
+    await saveMessages(next);
+
+    // 2) call backend
+    setLoading(true);
+    try {
+      // Try to pass the most recent self-reported stress level, if present
+      const lastStressCarrier = [...next].reverse().find(
+        m => m.sender === "user" && typeof (m as any).stress === "number"
+      ) as (Message & { stress?: number }) | undefined;
+
+      const mood = lastStressCarrier?.stress;
+
+      const reply = await chatWithAI(toChatMsgs(next), mood);
+
+      // 3) append assistant reply
+      const aiMsg: Message = {
+        id: Math.random().toString(36).slice(2),
+        text: reply,
+        sender: "assistant",
+        createdAt: Date.now()
+      };
+      const finalList = [...next, aiMsg];
+      setMessages(finalList);
+      await saveMessages(finalList);
+    } catch (e: any) {
+      setErrorText(String(e?.message || e));
+      // Append a friendly fallback (still hidden from future prompts by toChatMsgs)
+      const failMsg: Message = {
+        id: Math.random().toString(36).slice(2),
+        text: FALLBACK,
+        sender: "assistant",
+        createdAt: Date.now()
+      };
+      const finalList = [...next, failMsg];
+      setMessages(finalList);
+      await saveMessages(finalList);
+    } finally {
+      setLoading(false);
+    }
   }
-}
+
+  // 🔎 UI should NOT show prior conversation. Only show the latest assistant reply (if any).
+  const latestAssistant = [...messages].reverse().find(m => m.sender === "assistant");
+  const visibleMessages = latestAssistant ? [latestAssistant] : [];
 
   return (
     <KeyboardAvoidingView
@@ -126,18 +146,30 @@ async function send() {
       keyboardVerticalOffset={90}
     >
       <View style={styles.container}>
-        <Text style={styles.title}>Stress Less — Chat</Text>
+        <Text style={styles.title}>CalmSketch — Chat</Text>
 
         {!!errorText && (
           <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
         )}
 
+        {loading && (
+          <View style={{ paddingVertical: 6 }}>
+            <ActivityIndicator />
+          </View>
+        )}
+
+        {/* Only render the most recent AI message (no history clutter) */}
         <FlatList
-          data={messages}
+          data={visibleMessages}
           keyExtractor={m => m.id}
           contentContainerStyle={{ paddingBottom: 12 }}
           renderItem={({ item }) => <ChatMessage msg={item} />}
           style={{ flex: 1 }}
+          ListEmptyComponent={
+            <Text style={{ color: "#666" }}>
+              Tell me what’s on your mind. I’ll respond right here.
+            </Text>
+          }
         />
 
         <View style={styles.row}>
@@ -151,26 +183,6 @@ async function send() {
             editable={!loading}
           />
           <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
-          {/* DEBUG PANEL — remove later */}
-<View style={{ marginTop: 8, padding: 8, backgroundColor: "#f6f6f6", borderRadius: 8 }}>
-  <Text style={{ fontSize: 12, color: "#666" }}>Backend: {BACKEND_URL}</Text>
-  <Button
-    title="Test /api/health"
-    onPress={async () => {
-      try {
-        const r = await fetch(`${BACKEND_URL}/api/health`);
-        const t = await r.text();
-        alert(`health: ${r.status} ${t}`);
-      } catch (e: any) {
-        alert(`health failed: ${String(e)}`);
-      }
-    }}
-  />
-  {errorText ? (
-    <Text style={{ color: "crimson", marginTop: 6 }}>Last error: {errorText}</Text>
-  ) : null}
-</View>
-
         </View>
 
         <View style={{ marginTop: 8 }}>
