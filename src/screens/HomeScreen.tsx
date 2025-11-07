@@ -9,7 +9,9 @@ import {
   Platform,
   StyleSheet,
   ActivityIndicator,
-  TouchableOpacity
+  TouchableOpacity,
+  InputAccessoryView, // <-- iOS nicety
+  SafeAreaView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ChatMessage from "../../src/components/ChatMessage";
@@ -17,8 +19,8 @@ import { Message } from "../types";
 import { chatWithAI, ChatMsg } from "../lib/ai";
 import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
 
-
 const FALLBACK = "I hit a snag talking to the server. Mind trying again in a moment?";
+const ACCESSORY_ID = "chat-input-accessory";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -27,6 +29,9 @@ export default function HomeScreen() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  // Measure input row height so we can pad the FlatList bottom accordingly
+  const [inputBarHeight, setInputBarHeight] = useState(56); // sensible default
 
   // Session anchor: everything with createdAt >= sessionStart is "this session"
   const [sessionStart, setSessionStart] = useState<number>(() => Date.now());
@@ -39,36 +44,30 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // Start a brand-new session (does NOT delete old history; just hides it from the chat UI)
   function startNewSession() {
     setSessionStart(Date.now());
   }
 
-  // Map your internal messages to backend schema, trim old fallback lines, and only keep recent tail
   function toChatMsgs(ms: Message[]): ChatMsg[] {
     const system: ChatMsg = {
       role: "system",
-      content:
-        "You are a concise, supportive companion. Be validating, practical, and brief."
+      content: "You are a concise, supportive companion. Be validating, practical, and brief."
     };
 
     const rest: ChatMsg[] = ms
-      .filter(m => m.createdAt >= sessionStart) // only messages from this session
+      .filter(m => m.createdAt >= sessionStart)
       .filter(m => !(m.sender === "assistant" && m.text === FALLBACK))
       .map<ChatMsg>(m => ({
         role: m.sender === "assistant" ? "assistant" : "user",
         content: m.text
       }));
 
-    // Keep prompt small to avoid latency/cost
     const tail = rest.slice(-12);
     return [system, ...tail];
   }
 
   async function attachStress({ stress, tags }: { stress: number; tags: string[] }) {
     if (!messages.length) return;
-
-    // find last user message (in any session; that’s okay for logging)
     const idxFromEnd = [...messages].reverse().findIndex(m => m.sender === "user");
     const realIdx = idxFromEnd === -1 ? -1 : messages.length - 1 - idxFromEnd;
     if (realIdx < 0) return;
@@ -93,7 +92,6 @@ export default function HomeScreen() {
 
     setErrorText(null);
 
-    // 1) append user message locally (belongs to current session)
     const userMsg: Message = {
       id: Math.random().toString(36).slice(2),
       text: trimmed,
@@ -107,23 +105,20 @@ export default function HomeScreen() {
     setText("");
     await saveMessages(next);
 
-    // 2) call backend
     setLoading(true);
     type StressCarrier = Message & { stress: number };
     try {
-      // pass the most recent self-reported stress value (in this session if possible)
       const lastStressCarrier = [...next]
-      .filter(m => m.createdAt >= sessionStart)
-      .reverse()
-      .find(
-        (m): m is StressCarrier =>
-          m.sender === "user" && typeof (m as Record<string, unknown>).stress === "number"
-      );
+        .filter(m => m.createdAt >= sessionStart)
+        .reverse()
+        .find(
+          (m): m is StressCarrier =>
+            m.sender === "user" && typeof (m as Record<string, unknown>).stress === "number"
+        );
       const mood = lastStressCarrier?.stress;
 
       const reply = await chatWithAI(toChatMsgs(next), mood);
 
-      // 3) append assistant reply
       const aiMsg: Message = {
         id: Math.random().toString(36).slice(2),
         text: reply,
@@ -135,7 +130,6 @@ export default function HomeScreen() {
       await saveMessages(finalList);
     } catch (e: any) {
       setErrorText(String(e?.message || e));
-      // Append a friendly fallback (will be filtered from future prompts)
       const failMsg: Message = {
         id: Math.random().toString(36).slice(2),
         text: FALLBACK,
@@ -150,62 +144,92 @@ export default function HomeScreen() {
     }
   }
 
-  // Only render messages from the current session
   const sessionMessages = messages.filter(m => m.createdAt >= sessionStart);
 
+  // iOS: offset by header (approx) + top inset. Android: handled by "height"/adjustResize.
+  const keyboardVerticalOffset =
+    Platform.OS === "ios" ? Math.max(64, 90) + insets.top : 0;
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      // iOS uses padding; Android uses height to play nice with adjustResize
-      behavior={Platform.select({ ios: "padding", android: "height" })}
-      // Add some offset for any header plus safe area
-      keyboardVerticalOffset={Platform.select({ ios: 90 + insets.top, android: 0 })}
-    >
-      <View style={[styles.container, { paddingBottom: insets.bottom || 8 }]}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>CalmSketch — Chat</Text>
-          <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
-            <Text style={styles.newSessionText}>New Session</Text>
-          </TouchableOpacity>
-        </View>
-
-        {!!errorText && (
-          <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
-        )}
-
-        {loading && (
-          <View style={{ paddingVertical: 6 }}>
-            <ActivityIndicator />
+    <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.select({ ios: "padding", android: "height" })}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+      >
+        <View style={[styles.container, { paddingBottom: insets.bottom || 8 }]}>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>CalmSketch — Chat</Text>
+            <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
+              <Text style={styles.newSessionText}>New Session</Text>
+            </TouchableOpacity>
           </View>
-        )}
 
-        {/* Render the current session thread */}
-        <FlatList
-          data={sessionMessages}
-          keyExtractor={m => m.id}
-          contentContainerStyle={{ paddingBottom: 12 }}
-          renderItem={({ item }) => <ChatMessage msg={item} />}
-          style={{ flex: 1 }}
-          keyboardShouldPersistTaps="handled"
-        />
+          {!!errorText && (
+            <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
+          )}
 
-        {/* Input row sticks to bottom; KeyboardAvoidingView + safe-area keeps it visible */}
-        <View style={[styles.row, { marginBottom: 8 }]}>
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            placeholder="Tell me what's on your mind..."
-            onSubmitEditing={send}
-            returnKeyType="send"
-            editable={!loading}
+          {loading && (
+            <View style={{ paddingVertical: 6 }}>
+              <ActivityIndicator />
+            </View>
+          )}
+
+          {/* The message list: pad the bottom with the measured input bar height */}
+          <FlatList
+            data={sessionMessages}
+            keyExtractor={m => m.id}
+            renderItem={({ item }) => <ChatMessage msg={item} />}
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              paddingBottom: (inputBarHeight || 56) + 12, // <- keeps last item above the input bar
+            }}
           />
-          <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
-        </View>
 
-        
-      </View>
-    </KeyboardAvoidingView>
+          {/* iOS: ride the keyboard perfectly */}
+          {Platform.OS === "ios" ? (
+            <InputAccessoryView nativeID={ACCESSORY_ID}>
+              <View
+                style={[styles.row, { paddingBottom: Math.max(insets.bottom, 8) }]}
+                onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
+              >
+                <TextInput
+                  style={styles.input}
+                  value={text}
+                  onChangeText={setText}
+                  placeholder="Tell me what's on your mind..."
+                  onSubmitEditing={send}
+                  returnKeyType="send"
+                  inputAccessoryViewID={ACCESSORY_ID}
+                  editable={!loading}
+                  blurOnSubmit={false}
+                />
+                <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
+              </View>
+            </InputAccessoryView>
+          ) : (
+            // Android: keep it in normal flow; KeyboardAvoidingView + adjustResize/pan will move it
+            <View
+              style={[styles.row, { marginBottom: Math.max(insets.bottom, 8) }]}
+              onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
+            >
+              <TextInput
+                style={styles.input}
+                value={text}
+                onChangeText={setText}
+                placeholder="Tell me what's on your mind..."
+                onSubmitEditing={send}
+                returnKeyType="send"
+                editable={!loading}
+                blurOnSubmit={false}
+              />
+              <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -213,14 +237,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   title: { fontSize: 20, fontWeight: "700" },
-  row: { flexDirection: "row", gap: 8, alignItems: "center" },
+  row: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: "white", paddingHorizontal: 8, paddingTop: 8 },
   input: {
     flex: 1,
     borderWidth: 1,
     borderColor: "#CCC",
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: Platform.select({ ios: 12, android: 10 })
+    paddingVertical: Platform.select({ ios: 12, android: 10 }),
   },
   newSessionBtn: {
     paddingHorizontal: 10,
