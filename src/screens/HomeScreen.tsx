@@ -1,34 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  Button,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-  InputAccessoryView, // iOS-only nicety
+  View, Text, TextInput, Button, FlatList, Platform,
+  StyleSheet, ActivityIndicator, TouchableOpacity
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import ChatMessage from "../../src/components/ChatMessage";
 import { Message } from "../types";
 import { chatWithAI, ChatMsg } from "../lib/ai";
 import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
+import { useKeyboardInset } from "../hooks/useKeyboardInset"; // <-- add this import
 
 const FALLBACK = "I hit a snag talking to the server. Mind trying again in a moment?";
-const ACCESSORY_ID = "chat-input-accessory";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset(); // <-- keyboard height in px
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
-  const [inputBarHeight, setInputBarHeight] = useState(56); // measured later
+  const [inputBarHeight, setInputBarHeight] = useState(56);
 
   const [sessionStart, setSessionStart] = useState<number>(() => Date.now());
   const lastUserMsgId = useRef<string | null>(null);
@@ -82,7 +74,6 @@ export default function HomeScreen() {
   async function send() {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
-
     setErrorText(null);
 
     const userMsg: Message = {
@@ -139,97 +130,86 @@ export default function HomeScreen() {
 
   const sessionMessages = messages.filter(m => m.createdAt >= sessionStart);
 
-  // iOS only: account for header + safe area; Android lets the OS resize the window
-  const iosOffset = 64 + insets.top;
+  // The vertical shift we want under the input bar:
+  const bottomLift = keyboardInset + Math.max(insets.bottom, 8);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? iosOffset : 0}
-      >
-        <View style={[styles.container]}>
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>CalmSketch — Chat</Text>
-            <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
-              <Text style={styles.newSessionText}>New Session</Text>
-            </TouchableOpacity>
-          </View>
-
-          {!!errorText && (
-            <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
-          )}
-
-          {loading && (
-            <View style={{ paddingVertical: 6 }}>
-              <ActivityIndicator />
-            </View>
-          )}
-
-          <FlatList
-            data={sessionMessages}
-            keyExtractor={m => m.id}
-            renderItem={({ item }) => <ChatMessage msg={item} />}
-            style={{ flex: 1 }}
-            keyboardShouldPersistTaps="handled"
-            contentInsetAdjustmentBehavior="automatic"
-            contentContainerStyle={{
-              paddingBottom: inputBarHeight + Math.max(insets.bottom, 8), // ← keep above input
-            }}
-          />
-
-          {/* iOS: input rides the keyboard */}
-          {Platform.OS === "ios" ? (
-            <InputAccessoryView nativeID={ACCESSORY_ID}>
-              <View
-                style={[styles.row, { paddingBottom: Math.max(insets.bottom, 8) }]}
-                onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
-              >
-                <TextInput
-                  style={styles.input}
-                  value={text}
-                  onChangeText={setText}
-                  placeholder="Tell me what's on your mind..."
-                  onSubmitEditing={send}
-                  returnKeyType="send"
-                  inputAccessoryViewID={ACCESSORY_ID}
-                  editable={!loading}
-                  blurOnSubmit={false}
-                />
-                <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
-              </View>
-            </InputAccessoryView>
-          ) : (
-            // Android: normal flow; OS resizes the window
-            <View
-              style={[styles.row, { marginBottom: Math.max(insets.bottom, 8) }]}
-              onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
-            >
-              <TextInput
-                style={styles.input}
-                value={text}
-                onChangeText={setText}
-                placeholder="Tell me what's on your mind..."
-                onSubmitEditing={send}
-                returnKeyType="send"
-                editable={!loading}
-                blurOnSubmit={false}
-              />
-              <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
-            </View>
-          )}
+      <View style={styles.container}>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>CalmSketch — Chat</Text>
+          <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
+            <Text style={styles.newSessionText}>New Session</Text>
+          </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+
+        {!!errorText && <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>}
+        {loading && (
+          <View style={{ paddingVertical: 6 }}>
+            <ActivityIndicator />
+          </View>
+        )}
+
+        <FlatList
+          data={sessionMessages}
+          keyExtractor={(m) => m.id}
+          renderItem={({ item }) => <ChatMessage msg={item} />}
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{
+            // keep the last message above the floating input bar
+            paddingBottom: inputBarHeight + bottomLift + 12,
+          }}
+        />
+
+        {/* Floating input bar */}
+        <View
+          onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
+          style={[
+            styles.inputBar,
+            {
+              bottom: bottomLift, // <-- moves to sit above the keyboard
+              left: 0,
+              right: 0,
+            },
+          ]}
+        >
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            placeholder="Tell me what's on your mind..."
+            onSubmitEditing={send}
+            returnKeyType="send"
+            editable={!loading}
+            blurOnSubmit={false}
+          />
+          <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  headerRow: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", marginBottom: 8
+  },
   title: { fontSize: 20, fontWeight: "700" },
-  row: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: "white", paddingHorizontal: 8, paddingTop: 8 },
+  newSessionBtn: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#eee", borderRadius: 8 },
+  newSessionText: { fontSize: 12, fontWeight: "600", color: "#333" },
+
+  inputBar: {
+    position: "absolute",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    backgroundColor: "white",
+  },
   input: {
     flex: 1,
     borderWidth: 1,
@@ -238,11 +218,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: Platform.select({ ios: 12, android: 10 }),
   },
-  newSessionBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#eee",
-    borderRadius: 8
-  },
-  newSessionText: { fontSize: 12, fontWeight: "600", color: "#333" }
 });
