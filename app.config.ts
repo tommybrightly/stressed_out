@@ -12,7 +12,7 @@ supportsTablet: true,
 bundleIdentifier: "com.example.stressless"
 },
 android: {
-softwareKeyboardLayoutMode: "pan",
+softwareKeyboardLayoutMode: "resize",
 package: "com.example.stressless",
 adaptiveIcon: {
 backgroundColor: "#FFFFFF"
