@@ -3,10 +3,7 @@
 export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 
 // Put your Vercel URL here (production URL from the Vercel dashboard)
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  process.env.API_URL ||
-  "https://stressed-n20gxtfe6-thomas-brightlys-projects.vercel.app"; // <-- note https
+const BACKEND_URL = "https://stressed-n20gxtfe6-thomas-brightlys-projects.vercel.app"; //
 
 export async function chatWithAI(messages: ChatMsg[], mood?: number): Promise<string> {
   const res = await fetch(`${BACKEND_URL}/api/chat`, {   // <-- note /api/chat
