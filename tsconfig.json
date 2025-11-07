@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "ESNext",
+    "jsx": "react-jsx",
+    "strict": true,
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "types": [
+      "react",
+      "react-native",
+      "expo"
+    ],
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "paths": {
+      "@/*": [
+        "../src/*"
+      ],
+      "@/components/*": [
+        "../src/components/*"
+      ],
+      "@/screens/*": [
+        "../src/screens/*"
+      ],
+      "@/navigation/*": [
+        "../src/navigation/*"
+      ],
+      "@/storage/*": [
+        "../src/storage/*"
+      ],
+      "@/lib/*": [
+        "../src/lib/*"
+      ],
+      "@/types": [
+        "../src/types"
+      ]
+    }
+  },
+}

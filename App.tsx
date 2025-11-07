@@ -1,6 +1,6 @@
 import "react-native-gesture-handler";
 import { NavigationContainer } from "@react-navigation/native";
-import Tabs from "@/navigation/Tabs";
+import Tabs from "src/navigation/tabs";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { View } from "react-native";
@@ -18,3 +18,4 @@ return (
 </NavigationContainer>
 );
 }
+

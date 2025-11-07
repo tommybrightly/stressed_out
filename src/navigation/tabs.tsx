@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import HomeScreen from "@/screens/HomeScreen";
-import DrawingScreen from "@/screens/DrawingScreen";
-import MetricsScreen from "@/screens/MetricsScreen";
+import HomeScreen from "../../src/screens/HomeScreen";
+import DrawingScreen from "../screens/DrawingScreen";
+import MetricsScreen from "../screens/MetricsScreen";
 import { Ionicons } from "@expo/vector-icons";
 
 

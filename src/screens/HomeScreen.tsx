@@ -9,11 +9,11 @@ KeyboardAvoidingView,
 Platform,
 StyleSheet
 } from "react-native";
-import ChatMessage from "@/components/ChatMessage";
-import { Message } from "@/types";
-import { getAiReply } from "@/lib/mockAi";
-import { loadMessages, saveMessages, logStress } from "@/storage/storage";
-import StressTagInput from "@/components/StressTagInput";
+import ChatMessage from "../../src/components/ChatMessage";
+import { Message } from "../types";
+import { getAiReply } from "../../src/lib/mockAi";
+import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
+import StressTagInput from "../../src/components/StressTagInput";
 
 
 export default function HomeScreen() {
