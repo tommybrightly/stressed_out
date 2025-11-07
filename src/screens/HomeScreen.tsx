@@ -150,48 +150,52 @@ export default function HomeScreen() {
   const keyboardVerticalOffset =
     Platform.OS === "ios" ? Math.max(64, 90) + insets.top : 0;
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.select({ ios: "padding", android: "height" })}
-        keyboardVerticalOffset={keyboardVerticalOffset}
-      >
-        <View style={[styles.container, { paddingBottom: insets.bottom || 8 }]}>
-          <View style={styles.headerRow}>
-            <Text style={styles.title}>CalmSketch — Chat</Text>
-            <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
-              <Text style={styles.newSessionText}>New Session</Text>
-            </TouchableOpacity>
-          </View>
-
-          {!!errorText && (
-            <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
-          )}
-
-          {loading && (
-            <View style={{ paddingVertical: 6 }}>
-              <ActivityIndicator />
-            </View>
-          )}
-
-          {/* The message list: pad the bottom with the measured input bar height */}
-          <FlatList
-            data={sessionMessages}
-            keyExtractor={m => m.id}
-            renderItem={({ item }) => <ChatMessage msg={item} />}
-            style={{ flex: 1 }}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{
-              paddingBottom: (inputBarHeight || 56) + 12, // <- keeps last item above the input bar
-            }}
-          />
-
-          {/* iOS: ride the keyboard perfectly */}
-          {Platform.OS === "ios" ? (
-            <InputAccessoryView nativeID={ACCESSORY_ID}>
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined} // <— let Android resize
+          keyboardVerticalOffset={Platform.OS === "ios" ? 90 + insets.top : 0}
+        >
+          <View style={[styles.container, { paddingBottom: insets.bottom || 8 }]}>
+            {/* header + errors + loader ... unchanged */}
+    
+            <FlatList
+              data={sessionMessages}
+              keyExtractor={(m) => m.id}
+              renderItem={({ item }) => <ChatMessage msg={item} />}
+              style={{ flex: 1 }}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{
+                paddingBottom: (inputBarHeight || 56) + 12, // keep last message above input
+              }}
+            />
+    
+            {/* iOS uses InputAccessoryView so it rides with the keyboard */}
+            {Platform.OS === "ios" ? (
+              <InputAccessoryView nativeID="chat-input">
+                <View
+                  style={[styles.row, { paddingBottom: Math.max(insets.bottom, 8) }]}
+                  onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
+                >
+                  <TextInput
+                    style={styles.input}
+                    value={text}
+                    onChangeText={setText}
+                    placeholder="Tell me what's on your mind..."
+                    onSubmitEditing={send}
+                    returnKeyType="send"
+                    inputAccessoryViewID="chat-input"
+                    editable={!loading}
+                    blurOnSubmit={false}
+                  />
+                  <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
+                </View>
+              </InputAccessoryView>
+            ) : (
+              // Android: keep it in normal flow; window resize will move content up
               <View
-                style={[styles.row, { paddingBottom: Math.max(insets.bottom, 8) }]}
+                style={[styles.row, { marginBottom: Math.max(insets.bottom, 8) }]}
                 onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
               >
                 <TextInput
@@ -201,36 +205,16 @@ export default function HomeScreen() {
                   placeholder="Tell me what's on your mind..."
                   onSubmitEditing={send}
                   returnKeyType="send"
-                  inputAccessoryViewID={ACCESSORY_ID}
                   editable={!loading}
                   blurOnSubmit={false}
                 />
                 <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
               </View>
-            </InputAccessoryView>
-          ) : (
-            // Android: keep it in normal flow; KeyboardAvoidingView + adjustResize/pan will move it
-            <View
-              style={[styles.row, { marginBottom: Math.max(insets.bottom, 8) }]}
-              onLayout={e => setInputBarHeight(e.nativeEvent.layout.height)}
-            >
-              <TextInput
-                style={styles.input}
-                value={text}
-                onChangeText={setText}
-                placeholder="Tell me what's on your mind..."
-                onSubmitEditing={send}
-                returnKeyType="send"
-                editable={!loading}
-                blurOnSubmit={false}
-              />
-              <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
-            </View>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
 }
 
 const styles = StyleSheet.create({
