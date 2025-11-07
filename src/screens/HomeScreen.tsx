@@ -1,137 +1,184 @@
 import { useEffect, useRef, useState } from "react";
 import {
-View,
-Text,
-TextInput,
-Button,
-FlatList,
-KeyboardAvoidingView,
-Platform,
-StyleSheet
+  View,
+  Text,
+  TextInput,
+  Button,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet
 } from "react-native";
 import ChatMessage from "../../src/components/ChatMessage";
 import { Message } from "../types";
-import { getAiReply } from "../../src/lib/mockAi";
+import { chatWithAI, ChatMsg } from "../lib/ai";
 import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
 import StressTagInput from "../../src/components/StressTagInput";
 
-
 export default function HomeScreen() {
-const [messages, setMessages] = useState<Message[]>([]);
-const [text, setText] = useState("");
-const lastUserMsgId = useRef<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const lastUserMsgId = useRef<string | null>(null);
 
+  useEffect(() => {
+    (async () => {
+      const initial = await loadMessages();
+      setMessages(initial);
+    })();
+  }, []);
 
-useEffect(() => {
-(async () => {
-const initial = await loadMessages();
-setMessages(initial);
-})();
-}, []);
-
-
-async function send() {
-if (!text.trim()) return;
-const userMsg: Message = {
-id: Math.random().toString(36).slice(2),
-text: text.trim(),
-sender: "user",
-createdAt: Date.now()
-};
-lastUserMsgId.current = userMsg.id;
-
-
-const next = [...messages, userMsg];
-setMessages(next);
-setText("");
-await saveMessages(next);
-
-
-// Mock AI response
-const replyText = await getAiReply(userMsg.text);
-const aiMsg: Message = {
-id: Math.random().toString(36).slice(2),
-text: replyText,
-sender: "ai",
-createdAt: Date.now()
-};
-const next2 = [...next, aiMsg];
-setMessages(next2);
-await saveMessages(next2);
-}
-
-async function attachStress({ stress, tags }: { stress: number; tags: string[] }) {
-    // Attach stress/tags to the last user message (if present), and log a StressEntry
+  // ---- attachStress must be top-level (not nested inside send)
+  async function attachStress({ stress, tags }: { stress: number; tags: string[] }) {
     if (!messages.length) return;
-    const idx = [...messages].reverse().findIndex(m => m.sender === "user");
-    const realIdx = idx === -1 ? -1 : messages.length - 1 - idx;
-    if (realIdx >= 0) {
+
+    // find last user message
+    const idxFromEnd = [...messages].reverse().findIndex(m => m.sender === "user");
+    const realIdx = idxFromEnd === -1 ? -1 : messages.length - 1 - idxFromEnd;
+    if (realIdx < 0) return;
+
     const copy = [...messages];
     copy[realIdx] = { ...copy[realIdx], stress, tags };
     setMessages(copy);
     await saveMessages(copy);
-    
-    
+
     await logStress({
-    id: Math.random().toString(36).slice(2),
-    createdAt: Date.now(),
-    stress,
-    tags,
-    note: copy[realIdx].text
+      id: Math.random().toString(36).slice(2),
+      createdAt: Date.now(),
+      stress,
+      tags,
+      note: copy[realIdx].text
     });
+  }
+
+  // Convert your local messages to the ChatMsg[] expected by the backend.
+  function toChatMsgs(ms: Message[]): ChatMsg[] {
+    // Optional: include a system primer as the first message.
+    const system: ChatMsg = {
+      role: "system",
+      content:
+        "You are a concise, supportive companion. Be validating, practical, and brief. When user mentions stress or tags, use them to tailor the response."
+    };
+    const rest = ms.map<ChatMsg>(m => ({
+      role: m.sender === "assistant" ? "assistant" : "user",
+      content: m.text
+    }));
+    return [system, ...rest];
+  }
+
+  async function send() {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
+
+    setErrorText(null);
+
+    // 1) append user message locally
+    const userMsg: Message = {
+      id: Math.random().toString(36).slice(2),
+      text: trimmed,
+      sender: "user",
+      createdAt: Date.now()
+    };
+    lastUserMsgId.current = userMsg.id;
+
+    const next = [...messages, userMsg];
+    setMessages(next);
+    setText("");
+    await saveMessages(next);
+
+    // 2) call backend
+    setLoading(true);
+    try {
+      // Try to pass the most recent self-reported stress level, if present
+      // (We scan from the end for the last user msg that has stress recorded)
+      const lastStressCarrier = [...next].reverse().find(
+        m => m.sender === "user" && typeof (m as any).stress === "number"
+      ) as (Message & { stress?: number }) | undefined;
+
+      const mood = lastStressCarrier?.stress; // number | undefined
+
+      const replyText = await chatWithAI(toChatMsgs(next), mood);
+
+      // 3) append assistant reply
+      const aiMsg: Message = {
+        id: Math.random().toString(36).slice(2),
+        text: replyText,
+        sender: "assistant",
+        createdAt: Date.now()
+      };
+      const finalList = [...next, aiMsg];
+      setMessages(finalList);
+      await saveMessages(finalList);
+    } catch (e: any) {
+      setErrorText("Hmm, I couldn’t reach the AI right now. Please try again.");
+      // Optionally append a soft failure message for UX continuity:
+      const failMsg: Message = {
+        id: Math.random().toString(36).slice(2),
+        text: "I hit a snag talking to the server. Mind trying again in a moment?",
+        sender: "assistant",
+        createdAt: Date.now()
+      };
+      const finalList = [...next, failMsg];
+      setMessages(finalList);
+      await saveMessages(finalList);
+    } finally {
+      setLoading(false);
     }
-    }
-    
-    
-    return (
+  }
+
+  return (
     <KeyboardAvoidingView
-    style={{ flex: 1 }}
-    behavior={Platform.select({ ios: "padding", android: undefined })}
-    keyboardVerticalOffset={90}
+      style={{ flex: 1 }}
+      behavior={Platform.select({ ios: "padding", android: undefined })}
+      keyboardVerticalOffset={90}
     >
-    <View style={styles.container}>
-    <Text style={styles.title}>CalmSketch — Chat</Text>
-    <FlatList
-    data={messages}
-    keyExtractor={m => m.id}
-    contentContainerStyle={{ paddingBottom: 12 }}
-    renderItem={({ item }) => <ChatMessage msg={item} />}
-    style={{ flex: 1 }}
-    />
-    
-    
-    <View style={styles.row}>
-    <TextInput
-    style={styles.input}
-    value={text}
-    onChangeText={setText}
-    placeholder="Tell me what's on your mind..."
-    onSubmitEditing={send}
-    returnKeyType="send"
-    />
-    <Button title="Send" onPress={send} />
-    </View>
-    
-    
-    <View style={{ marginTop: 8 }}>
-    <StressTagInput onSave={attachStress} />
-    </View>
-    </View>
+      <View style={styles.container}>
+        <Text style={styles.title}>CalmSketch — Chat</Text>
+
+        {!!errorText && (
+          <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
+        )}
+
+        <FlatList
+          data={messages}
+          keyExtractor={m => m.id}
+          contentContainerStyle={{ paddingBottom: 12 }}
+          renderItem={({ item }) => <ChatMessage msg={item} />}
+          style={{ flex: 1 }}
+        />
+
+        <View style={styles.row}>
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            placeholder="Tell me what's on your mind..."
+            onSubmitEditing={send}
+            returnKeyType="send"
+            editable={!loading}
+          />
+          <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
+        </View>
+
+        <View style={{ marginTop: 8 }}>
+          <StressTagInput onSave={attachStress} />
+        </View>
+      </View>
     </KeyboardAvoidingView>
-    );
-    }
-    
-    
-    const styles = StyleSheet.create({
-    container: { flex: 1, padding: 16 },
-    title: { fontSize: 20, fontWeight: "700", marginBottom: 8 },
-    row: { flexDirection: "row", gap: 8, alignItems: "center" },
-    input: {
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 16 },
+  title: { fontSize: 20, fontWeight: "700", marginBottom: 8 },
+  row: { flexDirection: "row", gap: 8, alignItems: "center" },
+  input: {
     flex: 1,
     borderWidth: 1,
     borderColor: "#CCC",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10
-    }
-    });
+  }
+});
