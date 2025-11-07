@@ -109,17 +109,16 @@ export default function HomeScreen() {
 
     // 2) call backend
     setLoading(true);
-    type StressCarrier = Message & { stress: number }
+    type StressCarrier = Message & { stress: number };
     try {
       // pass the most recent self-reported stress value (in this session if possible)
       const lastStressCarrier = [...next]
-  .filter(m => m.createdAt >= sessionStart)
-  .reverse()
-  .find(
-    (m): m is StressCarrier =>
-      m.sender === "user" && typeof (m as Record<string, unknown>).stress === "number"
-  );
-
+      .filter(m => m.createdAt >= sessionStart)
+      .reverse()
+      .find(
+        (m): m is StressCarrier =>
+          m.sender === "user" && typeof (m as Record<string, unknown>).stress === "number"
+      );
       const mood = lastStressCarrier?.stress;
 
       const reply = await chatWithAI(toChatMsgs(next), mood);
@@ -204,7 +203,8 @@ export default function HomeScreen() {
           <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
         </View>
 
-        </View>
+        
+      </View>
     </KeyboardAvoidingView>
   );
 }
