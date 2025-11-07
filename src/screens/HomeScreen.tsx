@@ -8,8 +8,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  TouchableOpacity
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ChatMessage from "../../src/components/ChatMessage";
 import { Message } from "../types";
 import { chatWithAI, ChatMsg } from "../lib/ai";
@@ -19,13 +21,17 @@ import StressTagInput from "../../src/components/StressTagInput";
 const FALLBACK = "I hit a snag talking to the server. Mind trying again in a moment?";
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
+  // Session anchor: everything with createdAt >= sessionStart is "this session"
+  const [sessionStart, setSessionStart] = useState<number>(() => Date.now());
   const lastUserMsgId = useRef<string | null>(null);
 
-  // Load/persist messages for metrics, but we won't render the full history.
   useEffect(() => {
     (async () => {
       const initial = await loadMessages();
@@ -33,7 +39,12 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // Map your internal Message[] → backend ChatMsg[] (drop fallback lines, trim history)
+  // Start a brand-new session (does NOT delete old history; just hides it from the chat UI)
+  function startNewSession() {
+    setSessionStart(Date.now());
+  }
+
+  // Map your internal messages to backend schema, trim old fallback lines, and only keep recent tail
   function toChatMsgs(ms: Message[]): ChatMsg[] {
     const system: ChatMsg = {
       role: "system",
@@ -42,14 +53,14 @@ export default function HomeScreen() {
     };
 
     const rest: ChatMsg[] = ms
-      // remove our old fallback replies so they don't pollute context
+      .filter(m => m.createdAt >= sessionStart) // only messages from this session
       .filter(m => !(m.sender === "assistant" && m.text === FALLBACK))
       .map<ChatMsg>(m => ({
         role: m.sender === "assistant" ? "assistant" : "user",
         content: m.text
       }));
 
-    // keep the last 12 total (system + tail) to keep prompt small
+    // Keep prompt small to avoid latency/cost
     const tail = rest.slice(-12);
     return [system, ...tail];
   }
@@ -57,7 +68,7 @@ export default function HomeScreen() {
   async function attachStress({ stress, tags }: { stress: number; tags: string[] }) {
     if (!messages.length) return;
 
-    // find last user message
+    // find last user message (in any session; that’s okay for logging)
     const idxFromEnd = [...messages].reverse().findIndex(m => m.sender === "user");
     const realIdx = idxFromEnd === -1 ? -1 : messages.length - 1 - idxFromEnd;
     if (realIdx < 0) return;
@@ -82,7 +93,7 @@ export default function HomeScreen() {
 
     setErrorText(null);
 
-    // 1) append user message locally
+    // 1) append user message locally (belongs to current session)
     const userMsg: Message = {
       id: Math.random().toString(36).slice(2),
       text: trimmed,
@@ -98,11 +109,16 @@ export default function HomeScreen() {
 
     // 2) call backend
     setLoading(true);
+    type StressCarrier = Message & { stress: number }
     try {
-      // Try to pass the most recent self-reported stress level, if present
-      const lastStressCarrier = [...next].reverse().find(
-        m => m.sender === "user" && typeof (m as any).stress === "number"
-      ) as (Message & { stress?: number }) | undefined;
+      // pass the most recent self-reported stress value (in this session if possible)
+      const lastStressCarrier = [...next]
+  .filter(m => m.createdAt >= sessionStart)
+  .reverse()
+  .find(
+    (m): m is StressCarrier =>
+      m.sender === "user" && typeof (m as Record<string, unknown>).stress === "number"
+  );
 
       const mood = lastStressCarrier?.stress;
 
@@ -120,14 +136,14 @@ export default function HomeScreen() {
       await saveMessages(finalList);
     } catch (e: any) {
       setErrorText(String(e?.message || e));
-      // Append a friendly fallback (still hidden from future prompts by toChatMsgs)
+      // Append a friendly fallback (will be filtered from future prompts)
       const failMsg: Message = {
         id: Math.random().toString(36).slice(2),
         text: FALLBACK,
         sender: "assistant",
         createdAt: Date.now()
       };
-      const finalList = [...next, failMsg];
+      const finalList = [...messages, failMsg];
       setMessages(finalList);
       await saveMessages(finalList);
     } finally {
@@ -135,18 +151,24 @@ export default function HomeScreen() {
     }
   }
 
-  // 🔎 UI should NOT show prior conversation. Only show the latest assistant reply (if any).
-  const latestAssistant = [...messages].reverse().find(m => m.sender === "assistant");
-  const visibleMessages = latestAssistant ? [latestAssistant] : [];
+  // Only render messages from the current session
+  const sessionMessages = messages.filter(m => m.createdAt >= sessionStart);
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.select({ ios: "padding", android: undefined })}
-      keyboardVerticalOffset={90}
+      // iOS uses padding; Android uses height to play nice with adjustResize
+      behavior={Platform.select({ ios: "padding", android: "height" })}
+      // Add some offset for any header plus safe area
+      keyboardVerticalOffset={Platform.select({ ios: 90 + insets.top, android: 0 })}
     >
-      <View style={styles.container}>
-        <Text style={styles.title}>CalmSketch — Chat</Text>
+      <View style={[styles.container, { paddingBottom: insets.bottom || 8 }]}>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>CalmSketch — Chat</Text>
+          <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
+            <Text style={styles.newSessionText}>New Session</Text>
+          </TouchableOpacity>
+        </View>
 
         {!!errorText && (
           <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>
@@ -158,21 +180,18 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Only render the most recent AI message (no history clutter) */}
+        {/* Render the current session thread */}
         <FlatList
-          data={visibleMessages}
+          data={sessionMessages}
           keyExtractor={m => m.id}
           contentContainerStyle={{ paddingBottom: 12 }}
           renderItem={({ item }) => <ChatMessage msg={item} />}
           style={{ flex: 1 }}
-          ListEmptyComponent={
-            <Text style={{ color: "#666" }}>
-              Tell me what’s on your mind. I’ll respond right here.
-            </Text>
-          }
+          keyboardShouldPersistTaps="handled"
         />
 
-        <View style={styles.row}>
+        {/* Input row sticks to bottom; KeyboardAvoidingView + safe-area keeps it visible */}
+        <View style={[styles.row, { marginBottom: 8 }]}>
           <TextInput
             style={styles.input}
             value={text}
@@ -195,7 +214,8 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
-  title: { fontSize: 20, fontWeight: "700", marginBottom: 8 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  title: { fontSize: 20, fontWeight: "700" },
   row: { flexDirection: "row", gap: 8, alignItems: "center" },
   input: {
     flex: 1,
@@ -203,6 +223,13 @@ const styles = StyleSheet.create({
     borderColor: "#CCC",
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10
-  }
+    paddingVertical: Platform.select({ ios: 12, android: 10 })
+  },
+  newSessionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#eee",
+    borderRadius: 8
+  },
+  newSessionText: { fontSize: 12, fontWeight: "600", color: "#333" }
 });
