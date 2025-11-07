@@ -16,7 +16,7 @@ import ChatMessage from "../../src/components/ChatMessage";
 import { Message } from "../types";
 import { chatWithAI, ChatMsg } from "../lib/ai";
 import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
-import StressTagInput from "../../src/components/StressTagInput";
+
 
 const FALLBACK = "I hit a snag talking to the server. Mind trying again in a moment?";
 
@@ -204,10 +204,7 @@ export default function HomeScreen() {
           <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading} />
         </View>
 
-        <View style={{ marginTop: 8 }}>
-          <StressTagInput onSave={attachStress} />
         </View>
-      </View>
     </KeyboardAvoidingView>
   );
 }
