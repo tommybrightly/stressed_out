@@ -1,18 +1,31 @@
-// src/api/chat.ts
-export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
+import type { NextApiRequest, NextApiResponse } from "next";
+import OpenAI from "openai";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_API_URL   // Expo
-  || process.env.API_URL                               // RN CLI with env lib
-  || "https://stressedout-api.vercel.app";             // fallback
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-export async function chatWithAI(messages: ChatMsg[], mood?: number): Promise<string> {
-  const res = await fetch(`${BACKEND_URL}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, mood }),
-  });
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  try {
+    if (req.method !== "POST") return res.status(405).end("Method Not Allowed");
+    const { messages, mood } = req.body ?? {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "messages[] required" });
+    }
 
-  if (!res.ok) throw new Error(`AI error ${res.status}`);
-  const data = await res.json(); // expect { reply: string }
-  return data.reply ?? "I’m here with you. Let’s take a slow breath together.";
+    const system = [
+      { role: "system", content: "You are a concise, supportive companion." },
+      mood ? { role: "system", content: `User mood: ${mood}. Be validating and practical.` } : null,
+    ].filter(Boolean);
+
+    const resp = await client.responses.create({
+      model: "gpt-4o-mini",
+      input: [...system, ...messages], // [{role, content}]
+    });
+
+    const reply = resp.output_text?.trim() ||
+      "I’m here with you. Let’s take a slow breath together.";
+    res.json({ reply });
+  } catch (e: any) {
+    console.error(e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
 }
