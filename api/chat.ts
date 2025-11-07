@@ -1,11 +1,8 @@
-// backend/api/chat.ts
 import OpenAI from "openai";
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
 
   try {
     const { messages, mood } = req.body ?? {};
@@ -13,26 +10,26 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: "messages[] required" });
     }
 
-    const system = [
-      { role: "system", content: "You are a concise, supportive companion." },
-      mood ? { role: "system", content: `User mood: ${mood}. Be validating and practical.` } : null,
-    ].filter(Boolean);
+    // Build system preamble + trim the history a bit so the prompt stays small
+    const system = {
+      role: "system" as const,
+      content:
+        `You are a concise, supportive companion. Be validating, practical, and brief.` +
+        (typeof mood === "number" ? ` The user self-reported mood is ${mood}/10.` : "")
+    };
 
-    console.log("API/chat: calling OpenAI…");
+    // Keep the last 12 turns max
+    const tail = messages.slice(-12);
 
-    const resp = await client.responses.create({
+    const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      input: [...system, ...messages], // [{role, content}]
+      messages: [system, ...tail], // <- Chat Completions expects {role, content}
+      temperature: 0.7
     });
 
-    const reply = (resp as any)?.output_text?.trim?.();
-    if (!reply) {
-      console.error("API/chat: OpenAI returned no output_text", resp);
-      // Force an error so you can see it in the client + logs
-      return res.status(502).json({ error: "No output from model" });
-    }
+    const reply = completion.choices?.[0]?.message?.content?.trim();
+    if (!reply) return res.status(502).json({ error: "No output from model" });
 
-    console.log("API/chat: success");
     return res.status(200).json({ reply });
   } catch (e: any) {
     console.error("API/chat ERROR:", e);
