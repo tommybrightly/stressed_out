@@ -15,6 +15,7 @@ bundleIdentifier: "com.tbrightlty.stressless"
 android: {
 softwareKeyboardLayoutMode: "resize",
 package: "com.tbrightly.stressless",
+versionCode: 1,
 adaptiveIcon: {
 backgroundColor: "#FFFFFF"
 }
