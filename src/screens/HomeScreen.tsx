@@ -77,6 +77,18 @@ export default function HomeScreen() {
     })();
   }, []);
 
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+  }, [messages.length]);
+
+  // Also scroll when the keyboard opens (helps keep the latest message visible)
+  useEffect(() => {
+  if (keyboardInset > 0) {
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+  }
+}, [keyboardInset]);
+
   function startNewSession() {
     setSessionStart(Date.now());
   }
@@ -205,7 +217,7 @@ export default function HomeScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }} edges={["top", "bottom"]}>
       <View style={styles.container}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>CalmSketch — Chat</Text>
+          <Text style={styles.title}>Stress Less — Chat</Text>
           <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
             <Text style={styles.newSessionText}>New Session</Text>
           </TouchableOpacity>
@@ -233,6 +245,16 @@ export default function HomeScreen() {
             requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
           }}
         />
+
+
+          {/* Opaque underlay to prevent chat bubbles showing through when raised */}
+          <View
+            pointerEvents="none"
+            style={[
+              styles.inputUnderlay,
+              { height: bottomLift + inputBarHeight }, // covers from bottom to top of bar
+            ]}
+          />
 
         {/* Floating input bar */}
         <View
@@ -287,6 +309,18 @@ const styles = StyleSheet.create({
   },
   newSessionText: { fontSize: 12, fontWeight: "600", color: "#333" },
 
+  inputUnderlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "white",   // <- key: makes it fully opaque
+    // optional: a slight top border to separate
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e5e7eb",
+    zIndex: 1, // sits beneath the input bar (which has higher z)
+  },
+
   inputBar: {
     position: "absolute",
     flexDirection: "row",
@@ -295,9 +329,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: "white",
+    backgroundColor: "white",    // solid bg so nothing shows through
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#e5e7eb",
+    // subtle elevation/shadow so it looks like a proper tray
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 6,
+    elevation: 6,
+    zIndex: 2,                   // on top of the underlay
   },
   input: {
     flex: 1,

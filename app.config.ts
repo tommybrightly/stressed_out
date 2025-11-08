@@ -4,16 +4,16 @@ import { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
 name: "Stress Less",
 slug: "StressLess",
-scheme: "calmsketch",
+scheme: "stressless",
 orientation: "portrait",
 userInterfaceStyle: "automatic",
 ios: {
 supportsTablet: true,
-bundleIdentifier: "com.example.stressless"
+bundleIdentifier: "com.tbrightlty.stressless"
 },
 android: {
 softwareKeyboardLayoutMode: "resize",
-package: "com.example.stressless",
+package: "com.tbrightly.stressless",
 adaptiveIcon: {
 backgroundColor: "#FFFFFF"
 }
