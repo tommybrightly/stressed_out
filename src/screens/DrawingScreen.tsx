@@ -244,71 +244,107 @@ export default function DrawingScreen() {
 }
 
 const styles = StyleSheet.create({
-  canvasBlock: { flex: 1.1, backgroundColor: "#e5e7eb" },
-  canvasShot: { flex: 1 },
-  canvas: { flex: 1, backgroundColor: "#ffffff" },
-
-  toolbar: {
-    backgroundColor: "white",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#e5e7eb",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  row: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  label: { fontWeight: "600", marginRight: 6 },
-
-  swatch: { width: 28, height: 28, borderRadius: 14, borderColor: "#111" },
-  widthBtn: {
-    paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: "#cbd5e1", backgroundColor: "white"
-  },
-  viewerRoot: { flex: 1, backgroundColor: "black" },
-viewerTopBar: {
-  position: "absolute",
-  top: 0, left: 0, right: 0,
-  paddingTop: 14,
-  paddingHorizontal: 12,
-  paddingBottom: 8,
-  flexDirection: "row",
-  justifyContent: "space-between",
-  zIndex: 2,
-},
-viewerBtn: {
-  backgroundColor: "rgba(255,255,255,0.18)",
-  paddingHorizontal: 12,
-  paddingVertical: 6,
-  borderRadius: 10,
-},
-viewerDelete: { backgroundColor: "rgba(255,0,0,0.25)" },
-viewerBtnText: { color: "white", fontSize: 14 },
-
-viewerImageWrap: { flex: 1, justifyContent: "center", alignItems: "center" },
-viewerImage: { width: "100%", height: "100%" },
-
-viewerCloseOverlay: {
-  position: "absolute", left: 0, right: 0, top: 0, bottom: 0,
-},
-viewerHint: {
-  position: "absolute",
-  bottom: 22, alignSelf: "center",
-  color: "rgba(255,255,255,0.7)",
-  fontSize: 12,
-},
-  widthBtnActive: { borderColor: "#111" },
-
-  actionBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: "#f1f5f9", marginLeft: 6 },
-  saveBtn: { backgroundColor: "#dbeafe" },
-  actionText: { color: "#111" },
-
-  galleryBlock: { flex: 1, backgroundColor: "#f8fafc" },
-  galleryTitle: { fontSize: 16, fontWeight: "700", paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
-  thumbWrap: { width: "33.333%", aspectRatio: 1, padding: 6 },
-  thumb: { flex: 1, borderRadius: 8, backgroundColor: "#fff" },
-  deleteBadge: {
-    position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: 12,
-    alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.55)"
-  },
-  deleteText: { color: "white", fontSize: 14, lineHeight: 16 },
-  empty: { textAlign: "center", color: "#64748b", padding: 16 },
-});
+    // existing styles
+    canvasBlock: { flex: 1.1, backgroundColor: "#e5e7eb" },
+    canvasShot: { flex: 1 },
+    canvas: { flex: 1, backgroundColor: "#ffffff" },
+  
+    toolbar: {
+      backgroundColor: "white",
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: "#e5e7eb",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    row: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+    label: { fontWeight: "600", marginRight: 6 },
+  
+    swatch: { width: 28, height: 28, borderRadius: 14, borderColor: "#111" },
+    widthBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: "#cbd5e1",
+      backgroundColor: "white",
+    },
+    widthBtnActive: { borderColor: "#111" },
+  
+    actionBtn: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: "#f1f5f9",
+      marginLeft: 6,
+    },
+    saveBtn: { backgroundColor: "#dbeafe" },
+    actionText: { color: "#111" },
+  
+    galleryBlock: { flex: 1, backgroundColor: "#f8fafc" },
+    galleryTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      paddingHorizontal: 12,
+      paddingTop: 8,
+      paddingBottom: 4,
+    },
+    thumbWrap: { width: "33.333%", aspectRatio: 1, padding: 6 },
+    thumb: { flex: 1, borderRadius: 8, backgroundColor: "#fff" },
+  
+    deleteBadge: {
+      position: "absolute",
+      top: 6,
+      right: 6,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.55)",
+    },
+    deleteText: { color: "white", fontSize: 14, lineHeight: 16 },
+  
+    empty: { textAlign: "center", color: "#64748b", padding: 16 },
+  
+    // full-screen viewer styles
+    viewerRoot: { flex: 1, backgroundColor: "black" },
+    viewerTopBar: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      paddingTop: 14,
+      paddingHorizontal: 12,
+      paddingBottom: 8,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      zIndex: 2,
+    },
+    viewerBtn: {
+      backgroundColor: "rgba(255,255,255,0.18)",
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 10,
+    },
+    viewerDelete: { backgroundColor: "rgba(255,0,0,0.25)" },
+    viewerBtnText: { color: "white", fontSize: 14 },
+  
+    viewerImageWrap: { flex: 1, justifyContent: "center", alignItems: "center" },
+    viewerImage: { width: "100%", height: "100%" },
+  
+    viewerCloseOverlay: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+    },
+    viewerHint: {
+      position: "absolute",
+      bottom: 22,
+      alignSelf: "center",
+      color: "rgba(255,255,255,0.7)",
+      fontSize: 12,
+    },
+  });
+  
