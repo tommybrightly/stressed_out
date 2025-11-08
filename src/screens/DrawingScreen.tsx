@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, TouchableOpacity, Text } from "react-native";
 import { PanGestureHandler, PanGestureHandlerGestureEvent } from "react-native-gesture-handler";
 import Svg, { Path, Rect } from "react-native-svg";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 type Point = { x: number; y: number };
 type Stroke = { color: string; width: number; points: Point[] };
@@ -71,6 +72,7 @@ export default function DrawingScreen() {
   const draftPath = useMemo(() => (draft ? toSvgPath(draft.points) : ""), [draft]);
 
   return (
+    <GestureHandlerRootView>
     <View style={styles.container}>
       <View style={styles.toolbar}>
         <View style={styles.row}>
@@ -135,6 +137,7 @@ export default function DrawingScreen() {
         </View>
       </PanGestureHandler>
     </View>
+    </GestureHandlerRootView>
   );
 }
 
