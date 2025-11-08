@@ -1,13 +1,6 @@
-// src/screens/DrawingScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Text,
-  Image,
-  FlatList,
-  Alert,
+  View, StyleSheet, TouchableOpacity, Text, Image, FlatList, Alert,
 } from "react-native";
 import {
   GestureHandlerRootView,
@@ -16,16 +9,17 @@ import {
 } from "react-native-gesture-handler";
 import Svg, { Path, Rect } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
-import * as FileSystem from "expo-file-system";
-import type { SavedDrawing } from "../../src/storage/storage";
-import { loadDrawings, saveDrawings } from "../../src/storage/storage";
+import * as FileSystemModern from "expo-file-system";       // prefer new API
+import * as FileSystemLegacy from "expo-file-system/legacy"; // fallback only
+import { getFS, ensureDrawingsDir, deleteFile } from "../storage/fsCompat";
+import type { SavedDrawing } from "../storage/storage";
+import { loadDrawings, saveDrawings } from "../storage/storage";
 
 type Point = { x: number; y: number };
 type Stroke = { color: string; width: number; points: Point[] };
 
 const colors = ["#111111", "#e11d48", "#0ea5e9", "#10b981", "#f59e0b"];
 const widths = [2, 4, 8, 12];
-
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 function toSvgPath(points: Point[]) {
@@ -35,19 +29,15 @@ function toSvgPath(points: Point[]) {
 }
 
 export default function DrawingScreen() {
-  // drawing state
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [draft, setDraft] = useState<Stroke | null>(null);
   const [brushColor, setBrushColor] = useState(colors[0]);
   const [brushWidth, setBrushWidth] = useState(widths[1]);
 
-  // gallery (persistent)
   const [saved, setSaved] = useState<SavedDrawing[]>([]);
-
-  // ref for capturing the canvas
   const viewShotRef = useRef<ViewShot>(null);
 
-  // load persisted gallery on mount
+  // Load persisted gallery
   useEffect(() => {
     (async () => {
       const existing = await loadDrawings();
@@ -55,13 +45,10 @@ export default function DrawingScreen() {
     })();
   }, []);
 
-  // start/extend/commit stroke
-  const startStroke = useCallback(
-    (x: number, y: number) => {
-      setDraft({ color: brushColor, width: brushWidth, points: [{ x, y }] });
-    },
-    [brushColor, brushWidth]
-  );
+  // Drawing
+  const startStroke = useCallback((x: number, y: number) => {
+    setDraft({ color: brushColor, width: brushWidth, points: [{ x, y }] });
+  }, [brushColor, brushWidth]);
 
   const appendPoint = useCallback((x: number, y: number) => {
     setDraft(prev => (prev ? { ...prev, points: [...prev.points, { x, y }] } : prev));
@@ -72,51 +59,58 @@ export default function DrawingScreen() {
     setDraft(null);
   }, [draft]);
 
-  // gestures
-  const onGestureEvent = useCallback(
-    (e: PanGestureHandlerGestureEvent) => {
-      const { x, y } = e.nativeEvent;
-      appendPoint(x, y);
-    },
-    [appendPoint]
-  );
+  const onGestureEvent = useCallback((e: PanGestureHandlerGestureEvent) => {
+    const { x, y } = e.nativeEvent;
+    appendPoint(x, y);
+  }, [appendPoint]);
 
-  const onHandlerStateChange = useCallback(
-    (e: PanGestureHandlerGestureEvent) => {
-      const { state, x, y } = e.nativeEvent as any;
-      // 2 = BEGAN, 4 = ACTIVE, 5 = END, 3 = CANCELLED
-      if (state === 2) startStroke(x, y);
-      else if (state === 5 || state === 3) endStroke();
-    },
-    [startStroke, endStroke]
-  );
+  const onHandlerStateChange = useCallback((e: PanGestureHandlerGestureEvent) => {
+    const { state, x, y } = e.nativeEvent as any;
+    if (state === 2) startStroke(x, y);
+    else if (state === 5 || state === 3) endStroke();
+  }, [startStroke, endStroke]);
 
-  // actions
   const undo = () => setStrokes(prev => prev.slice(0, -1));
-  const clear = () => {
-    setDraft(null);
-    setStrokes([]);
-  };
+  const clear = () => { setDraft(null); setStrokes([]); };
 
+  // SAVE with modern API (fallback to legacy if needed by the wrapper elsewhere)
   const save = async () => {
     try {
-      // capture without args; options are on the ViewShot element
       const tmpUri = await viewShotRef.current?.capture?.();
       if (!tmpUri) throw new Error("Capture failed");
 
-      // choose a writable base directory (TS-safe shim if types are older)
-      const FS_ANY: any = FileSystem;
-      const baseDir: string =
-        (FS_ANY.documentDirectory as string | undefined) ??
-        (FS_ANY.cacheDirectory as string | undefined) ??
-        "";
-      if (!baseDir) throw new Error("No writable directory available.");
+      // Ensure target dir (new API if available)
+      const fs = await getFS();
+      const drawingsDir = await ensureDrawingsDir(fs);
 
-      const dest = `${baseDir}${uid()}.png`;
-      // copy (safer than move across boundaries)
-      await FileSystem.copyAsync({ from: tmpUri, to: dest });
+      // Decide destination filename
+      const filename = `${uid()}.png`;
+      let destUri: string;
 
-      const entry: SavedDrawing = { id: uid(), uri: dest, createdAt: Date.now() };
+      if ((FileSystemModern as any).File && fs.kind === "modern") {
+        // New API: create file object in /drawings and copy the tmpfile over
+        const file = await drawingsDir.createFileAsync(filename); // File instance
+        // The new API exposes File.write / File.writeFromUriAsync (names can vary).
+        if (file.writeFromUriAsync) {
+          await file.writeFromUriAsync(tmpUri);
+        } else if ((FileSystemModern as any).copyAsync) {
+          // If your SDK still exposes copyAsync on the module, use it as a bridge:
+          await (FileSystemModern as any).copyAsync({ from: tmpUri, to: file.uri });
+        } else {
+          // Last resort: use legacy copy if present (rare, but keeps you unblocked)
+          await (FileSystemLegacy as any).copyAsync({ from: tmpUri, to: file.uri });
+        }
+        destUri = file.uri;
+      } else {
+        // Legacy destination path
+        const legacyRoot = (FileSystemLegacy as any).documentDirectory!;
+        const legacyDir = legacyRoot + "drawings/";
+        try { await (FileSystemLegacy as any).makeDirectoryAsync(legacyDir, { intermediates: true }); } catch {}
+        destUri = legacyDir + filename;
+        await (FileSystemLegacy as any).copyAsync({ from: tmpUri, to: destUri });
+      }
+
+      const entry: SavedDrawing = { id: filename, uri: destUri, createdAt: Date.now() };
       const next = [entry, ...saved];
       setSaved(next);
       await saveDrawings(next);
@@ -125,7 +119,7 @@ export default function DrawingScreen() {
     }
   };
 
-  const deleteOne = async (item: SavedDrawing) => {
+  const onDeleteOne = async (item: SavedDrawing) => {
     Alert.alert("Delete drawing?", "This will remove the image from your device.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -133,13 +127,20 @@ export default function DrawingScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            // delete the file (ignore if it doesn't exist)
-            try { await FileSystem.deleteAsync(item.uri, { idempotent: true }); } catch {}
+            const fs = await getFS();
+            if (fs.kind === "modern") {
+              // Modern: delete by name inside drawings directory
+              const drawingsDir = await ensureDrawingsDir(fs);
+              await deleteFile(fs, drawingsDir, item.id);
+            } else {
+              // Legacy: delete by full URI
+              try { await (FileSystemLegacy as any).deleteAsync(item.uri, { idempotent: true }); } catch {}
+            }
             const next = saved.filter(x => x.id !== item.id);
             setSaved(next);
             await saveDrawings(next);
-          } catch (err: any) {
-            Alert.alert("Delete failed", String(err?.message || err));
+          } catch (e: any) {
+            Alert.alert("Delete failed", String(e?.message || e));
           }
         },
       },
@@ -150,7 +151,7 @@ export default function DrawingScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#f8fafc" }}>
-      {/* Canvas ~half of the screen */}
+      {/* Canvas ~half */}
       <View style={styles.canvasBlock}>
         <ViewShot
           ref={viewShotRef}
@@ -164,7 +165,6 @@ export default function DrawingScreen() {
           >
             <View style={styles.canvas}>
               <Svg style={StyleSheet.absoluteFill}>
-                {/* solid background so saved PNGs aren't transparent */}
                 <Rect x={0} y={0} width="100%" height="100%" fill="#ffffff" />
                 {strokes.map((s, idx) => (
                   <Path
@@ -208,7 +208,6 @@ export default function DrawingScreen() {
             />
           ))}
         </View>
-
         <View style={styles.row}>
           <Text style={styles.label}>Width</Text>
           {widths.map(w => (
@@ -217,25 +216,13 @@ export default function DrawingScreen() {
               onPress={() => setBrushWidth(w)}
               style={[styles.widthBtn, brushWidth === w && styles.widthBtnActive]}
             >
-              <View
-                style={{
-                  width: w * 2,
-                  height: w,
-                  backgroundColor: brushColor,
-                  borderRadius: 999,
-                }}
-              />
+              <View style={{ width: w * 2, height: w, backgroundColor: brushColor, borderRadius: 999 }} />
             </TouchableOpacity>
           ))}
         </View>
-
         <View style={[styles.row, { justifyContent: "flex-end", marginBottom: 0 }]}>
-          <TouchableOpacity onPress={undo} style={styles.actionBtn}>
-            <Text style={styles.actionText}>Undo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={clear} style={styles.actionBtn}>
-            <Text style={styles.actionText}>Clear</Text>
-          </TouchableOpacity>
+          <TouchableOpacity onPress={undo} style={styles.actionBtn}><Text style={styles.actionText}>Undo</Text></TouchableOpacity>
+          <TouchableOpacity onPress={clear} style={styles.actionBtn}><Text style={styles.actionText}>Clear</Text></TouchableOpacity>
           <TouchableOpacity onPress={save} style={[styles.actionBtn, styles.saveBtn]}>
             <Text style={[styles.actionText, { fontWeight: "700" }]}>Save</Text>
           </TouchableOpacity>
@@ -253,19 +240,13 @@ export default function DrawingScreen() {
           renderItem={({ item }) => (
             <View style={styles.thumbWrap}>
               <Image source={{ uri: item.uri }} style={styles.thumb} />
-              {/* delete button overlay */}
-              <TouchableOpacity
-                onPress={() => deleteOne(item)}
-                style={styles.deleteBadge}
-              >
+              <TouchableOpacity onPress={() => onDeleteOne(item)} style={styles.deleteBadge}>
                 <Text style={styles.deleteText}>✕</Text>
               </TouchableOpacity>
             </View>
           )}
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              Nothing saved yet. Tap “Save” to add your first doodle.
-            </Text>
+            <Text style={styles.empty}>Nothing saved yet. Tap “Save” to add your first doodle.</Text>
           }
         />
       </View>
@@ -274,7 +255,6 @@ export default function DrawingScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ~half screen for canvas; gallery gets remaining space
   canvasBlock: { flex: 1.1, backgroundColor: "#e5e7eb" },
   canvasShot: { flex: 1 },
   canvas: { flex: 1, backgroundColor: "#ffffff" },
@@ -289,55 +269,28 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   label: { fontWeight: "600", marginRight: 6 },
 
-  swatch: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderColor: "#111",
-  },
+  swatch: { width: 28, height: 28, borderRadius: 14, borderColor: "#111" },
   widthBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#cbd5e1",
-    backgroundColor: "white",
+    paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: "#cbd5e1", backgroundColor: "white"
   },
   widthBtnActive: { borderColor: "#111" },
 
   actionBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
-    marginLeft: 6,
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: "#f1f5f9", marginLeft: 6,
   },
   saveBtn: { backgroundColor: "#dbeafe" },
   actionText: { color: "#111" },
 
   galleryBlock: { flex: 1, backgroundColor: "#f8fafc" },
-  galleryTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
+  galleryTitle: { fontSize: 16, fontWeight: "700", paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
   thumbWrap: { width: "33.333%", aspectRatio: 1, padding: 6 },
   thumb: { flex: 1, borderRadius: 8, backgroundColor: "#fff" },
-
   deleteBadge: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: 12,
+    alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.55)",
   },
   deleteText: { color: "white", fontSize: 14, lineHeight: 16 },
-
   empty: { textAlign: "center", color: "#64748b", padding: 16 },
 });
