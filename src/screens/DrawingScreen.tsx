@@ -74,32 +74,6 @@ export default function DrawingScreen() {
   return (
     <GestureHandlerRootView>
     <View style={styles.container}>
-      <View style={styles.toolbar}>
-        <View style={styles.row}>
-          {colors.map(c => (
-            <TouchableOpacity
-              key={c}
-              onPress={() => setBrushColor(c)}
-              style={[styles.swatch, { backgroundColor: c, borderWidth: brushColor === c ? 2 : 0 }]}
-            />
-          ))}
-        </View>
-        <View style={styles.row}>
-          {[2, 4, 8, 12].map(w => (
-            <TouchableOpacity
-              key={w}
-              onPress={() => setBrushWidth(w)}
-              style={[styles.widthBtn, brushWidth === w && styles.widthBtnActive]}
-            >
-              <View style={{ width: w * 2, height: w, backgroundColor: "#111", borderRadius: 999 }} />
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.row}>
-          <TouchableOpacity onPress={undo} style={styles.actionBtn}><Text>Undo</Text></TouchableOpacity>
-          <TouchableOpacity onPress={clear} style={styles.actionBtn}><Text>Clear</Text></TouchableOpacity>
-        </View>
-      </View>
 
       <PanGestureHandler
         onGestureEvent={onGestureEvent}
@@ -133,6 +107,32 @@ export default function DrawingScreen() {
                 fill="none"
               />
             )}
+      <View style={styles.toolbar}>
+        <View style={styles.row}>
+          {colors.map(c => (
+            <TouchableOpacity
+              key={c}
+              onPress={() => setBrushColor(c)}
+              style={[styles.swatch, { backgroundColor: c, borderWidth: brushColor === c ? 2 : 0 }]}
+            />
+          ))}
+        </View>
+        <View style={styles.row}>
+          {[2, 4, 8, 12].map(w => (
+            <TouchableOpacity
+              key={w}
+              onPress={() => setBrushWidth(w)}
+              style={[styles.widthBtn, brushWidth === w && styles.widthBtnActive]}
+            >
+              <View style={{ width: w * 2, height: w, backgroundColor: "#111", borderRadius: 999 }} />
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.row}>
+          <TouchableOpacity onPress={undo} style={styles.actionBtn}><Text>Undo</Text></TouchableOpacity>
+          <TouchableOpacity onPress={clear} style={styles.actionBtn}><Text>Clear</Text></TouchableOpacity>
+        </View>
+      </View>
           </Svg>
         </View>
       </PanGestureHandler>
