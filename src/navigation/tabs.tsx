@@ -3,10 +3,20 @@ import HomeScreen from "../../src/screens/HomeScreen";
 import DrawingScreen from "../screens/DrawingScreen";
 import MetricsScreen from "../screens/MetricsScreen";
 import { Ionicons } from "@expo/vector-icons";
+import { View, Text } from "react-native";
 
 
 const Tab = createBottomTabNavigator();
 
+
+function Dummy() {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Text>Boot OK</Text>
+      </View>
+    );
+  }
+  
 
 export default function Tabs() {
 return (
