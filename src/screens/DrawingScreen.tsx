@@ -1,6 +1,6 @@
 // src/screens/DrawingScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, TouchableOpacity, Text, Image, FlatList, Alert } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Text, Image, FlatList, Alert, Modal, StatusBar } from "react-native";
 import { GestureHandlerRootView, PanGestureHandler, PanGestureHandlerGestureEvent } from "react-native-gesture-handler";
 import Svg, { Path, Rect } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
@@ -11,6 +11,10 @@ import { Directory, File, Paths } from "expo-file-system";
 import * as FSLegacy from "expo-file-system/legacy";
 
 import { loadDrawings, saveDrawings, type SavedDrawing } from "../storage/storage";
+
+//for gallery images
+const [viewerItem, setViewerItem] = useState<SavedDrawing | null>(null);
+
 
 type Point = { x: number; y: number };
 type Stroke = { color: string; width: number; points: Point[] };
@@ -186,7 +190,9 @@ export default function DrawingScreen() {
           numColumns={3}
           renderItem={({ item }) => (
             <View style={styles.thumbWrap}>
-              <Image source={{ uri: item.uri }} style={styles.thumb} />
+              <TouchableOpacity onPress={() => setViewerItem(item)} activeOpacity={0.9}>
+                  <Image source={{ uri: item.uri }} style={styles.thumb} />
+              </TouchableOpacity>
               <TouchableOpacity onPress={() => onDeleteOne(item)} style={styles.deleteBadge}>
                 <Text style={styles.deleteText}>✕</Text>
               </TouchableOpacity>
@@ -195,6 +201,44 @@ export default function DrawingScreen() {
           ListEmptyComponent={<Text style={styles.empty}>Nothing saved yet. Tap “Save”.</Text>}
         />
       </View>
+      <Modal
+  visible={!!viewerItem}
+  transparent={false}
+  animationType="fade"
+  onRequestClose={() => setViewerItem(null)}
+>
+  <StatusBar hidden />
+  <View style={styles.viewerRoot}>
+    {/* Top bar */}
+    <View style={styles.viewerTopBar}>
+      <TouchableOpacity onPress={() => setViewerItem(null)} style={styles.viewerBtn}>
+        <Text style={styles.viewerBtnText}>Close</Text>
+      </TouchableOpacity>
+      {!!viewerItem && (
+        <TouchableOpacity onPress={() => onDeleteOne(viewerItem)} style={[styles.viewerBtn, styles.viewerDelete]}>
+          <Text style={[styles.viewerBtnText, { fontWeight: "700" }]}>Delete</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+
+    {/* Fullscreen image */}
+    {!!viewerItem && (
+      <View style={styles.viewerImageWrap}>
+        <Image
+          source={{ uri: viewerItem.uri }}
+          style={styles.viewerImage}
+          resizeMode="contain"
+        />
+      </View>
+    )}
+
+    {/* Tap to close hint (optional) */}
+    <TouchableOpacity style={styles.viewerCloseOverlay} onPress={() => setViewerItem(null)} activeOpacity={1}>
+      <Text style={styles.viewerHint}>Tap anywhere to close</Text>
+    </TouchableOpacity>
+  </View>
+</Modal>
+
     </GestureHandlerRootView>
   );
 }
@@ -219,6 +263,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth, borderColor: "#cbd5e1", backgroundColor: "white"
   },
+  viewerRoot: { flex: 1, backgroundColor: "black" },
+viewerTopBar: {
+  position: "absolute",
+  top: 0, left: 0, right: 0,
+  paddingTop: 14,
+  paddingHorizontal: 12,
+  paddingBottom: 8,
+  flexDirection: "row",
+  justifyContent: "space-between",
+  zIndex: 2,
+},
+viewerBtn: {
+  backgroundColor: "rgba(255,255,255,0.18)",
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 10,
+},
+viewerDelete: { backgroundColor: "rgba(255,0,0,0.25)" },
+viewerBtnText: { color: "white", fontSize: 14 },
+
+viewerImageWrap: { flex: 1, justifyContent: "center", alignItems: "center" },
+viewerImage: { width: "100%", height: "100%" },
+
+viewerCloseOverlay: {
+  position: "absolute", left: 0, right: 0, top: 0, bottom: 0,
+},
+viewerHint: {
+  position: "absolute",
+  bottom: 22, alignSelf: "center",
+  color: "rgba(255,255,255,0.7)",
+  fontSize: 12,
+},
   widthBtnActive: { borderColor: "#111" },
 
   actionBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: "#f1f5f9", marginLeft: 6 },
