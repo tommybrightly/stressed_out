@@ -4,6 +4,7 @@ import DrawingScreen from "../screens/DrawingScreen";
 import MetricsScreen from "../screens/MetricsScreen";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text } from "react-native";
+import PieTabIcon from "../components/icons/PieTabIcon";
 
 
 const Tab = createBottomTabNavigator();
@@ -29,7 +30,16 @@ options={{
 tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="brush-outline" color={color} size={size} />
 }}
 />
-<Tab.Screen name="Metrics" component={MetricsScreen} />
+<Tab.Screen
+        name="Metrics"
+        component={MetricsScreen}
+        options={{
+          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+            <PieTabIcon color={color} size={size} />
+          ),
+          title: "Metrics",
+        }}
+      />
 </Tab.Navigator>
 );
 }

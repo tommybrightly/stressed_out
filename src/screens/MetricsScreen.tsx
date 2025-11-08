@@ -5,11 +5,11 @@ import Svg, { G, Path } from "react-native-svg";
 import { loadEmotionEvents, countsFrom } from "../storage/emotions";
 import { EMOTION_CATEGORIES, EmotionCategory } from "../emotion/classifyEmotion";
 
-// pleasant fixed palette (you can tweak)
+// tweak colors any time
 const COLORS: Record<EmotionCategory, string> = {
   calm: "#60a5fa",
   happy: "#fbbf24",
-  sad: "#60a5fa",     // you can separate if you prefer
+  sad: "#3b82f6",
   mad: "#ef4444",
   anxious: "#a78bfa",
   hopeless: "#6b7280",
@@ -19,7 +19,6 @@ const COLORS: Record<EmotionCategory, string> = {
   grief: "#4b5563",
 };
 
-// build arcs with d3-shape-ish math (no dependency)
 type Slice = { cat: EmotionCategory; start: number; end: number; value: number; pct: number };
 
 function buildPie(counts: Record<EmotionCategory, number>): Slice[] {
