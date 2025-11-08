@@ -267,7 +267,10 @@ export default function DrawingScreen() {
           renderItem={({ item }) => (
             <View style={styles.thumbWrap}>
               <TouchableOpacity onPress={() => setViewerItem(item)} activeOpacity={0.9}>
-                <Image source={{ uri: item.uri }} style={styles.thumb} />
+                <Image source={{ uri: item.uri?.startsWith("file://") ? item.uri : `file://${item.uri}` }}
+                style={styles.thumb}
+                resizeMode="cover"
+                 />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => onDeleteOne(item)} style={styles.deleteBadge}>
                 <Text style={styles.deleteText}>✕</Text>
@@ -365,7 +368,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   thumbWrap: { width: "33.333%", aspectRatio: 1, padding: 6 },
-  thumb: { flex: 1, borderRadius: 8, backgroundColor: "#fff" },
+  thumb: { width: "100%", height: "100%", borderRadius: 8, backgroundColor: "#fff" },
 
   deleteBadge: {
     position: "absolute",
