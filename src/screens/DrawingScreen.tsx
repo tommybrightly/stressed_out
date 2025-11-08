@@ -1,19 +1,16 @@
+// src/screens/DrawingScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  View, StyleSheet, TouchableOpacity, Text, Image, FlatList, Alert,
-} from "react-native";
-import {
-  GestureHandlerRootView,
-  PanGestureHandler,
-  PanGestureHandlerGestureEvent,
-} from "react-native-gesture-handler";
+import { View, StyleSheet, TouchableOpacity, Text, Image, FlatList, Alert } from "react-native";
+import { GestureHandlerRootView, PanGestureHandler, PanGestureHandlerGestureEvent } from "react-native-gesture-handler";
 import Svg, { Path, Rect } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
-import * as FileSystemModern from "expo-file-system";       // prefer new API
-import * as FileSystemLegacy from "expo-file-system/legacy"; // fallback only
-import { getFS, ensureDrawingsDir, deleteFile } from "../storage/fsCompat";
-import type { SavedDrawing } from "../storage/storage";
-import { loadDrawings, saveDrawings } from "../storage/storage";
+
+// ⬇️ modern API (classes)
+import { Directory, File, Paths } from "expo-file-system";
+// ⬇️ single bridge call for copy; remove once expo exposes File.writeFromUri or similar everywhere
+import * as FSLegacy from "expo-file-system/legacy";
+
+import { loadDrawings, saveDrawings, type SavedDrawing } from "../storage/storage";
 
 type Point = { x: number; y: number };
 type Stroke = { color: string; width: number; points: Point[] };
@@ -37,7 +34,13 @@ export default function DrawingScreen() {
   const [saved, setSaved] = useState<SavedDrawing[]>([]);
   const viewShotRef = useRef<ViewShot>(null);
 
-  // Load persisted gallery
+  // Prepare modern directories/files
+  const drawingsDir = useMemo(() => {
+    const d = new Directory(Paths.document, "drawings");
+    if (!d.exists) d.create();
+    return d;
+  }, []);
+
   useEffect(() => {
     (async () => {
       const existing = await loadDrawings();
@@ -45,7 +48,7 @@ export default function DrawingScreen() {
     })();
   }, []);
 
-  // Drawing
+  // drawing handlers
   const startStroke = useCallback((x: number, y: number) => {
     setDraft({ color: brushColor, width: brushWidth, points: [{ x, y }] });
   }, [brushColor, brushWidth]);
@@ -73,44 +76,21 @@ export default function DrawingScreen() {
   const undo = () => setStrokes(prev => prev.slice(0, -1));
   const clear = () => { setDraft(null); setStrokes([]); };
 
-  // SAVE with modern API (fallback to legacy if needed by the wrapper elsewhere)
   const save = async () => {
     try {
       const tmpUri = await viewShotRef.current?.capture?.();
       if (!tmpUri) throw new Error("Capture failed");
 
-      // Ensure target dir (new API if available)
-      const fs = await getFS();
-      const drawingsDir = await ensureDrawingsDir(fs);
-
-      // Decide destination filename
+      // create destination File in modern API
       const filename = `${uid()}.png`;
-      let destUri: string;
+      const destFile = new File(drawingsDir, filename);
+      if (!drawingsDir.exists) drawingsDir.create();
+      if (!destFile.exists) destFile.create();
 
-      if ((FileSystemModern as any).File && fs.kind === "modern") {
-        // New API: create file object in /drawings and copy the tmpfile over
-        const file = await drawingsDir.createFileAsync(filename); // File instance
-        // The new API exposes File.write / File.writeFromUriAsync (names can vary).
-        if (file.writeFromUriAsync) {
-          await file.writeFromUriAsync(tmpUri);
-        } else if ((FileSystemModern as any).copyAsync) {
-          // If your SDK still exposes copyAsync on the module, use it as a bridge:
-          await (FileSystemModern as any).copyAsync({ from: tmpUri, to: file.uri });
-        } else {
-          // Last resort: use legacy copy if present (rare, but keeps you unblocked)
-          await (FileSystemLegacy as any).copyAsync({ from: tmpUri, to: file.uri });
-        }
-        destUri = file.uri;
-      } else {
-        // Legacy destination path
-        const legacyRoot = (FileSystemLegacy as any).documentDirectory!;
-        const legacyDir = legacyRoot + "drawings/";
-        try { await (FileSystemLegacy as any).makeDirectoryAsync(legacyDir, { intermediates: true }); } catch {}
-        destUri = legacyDir + filename;
-        await (FileSystemLegacy as any).copyAsync({ from: tmpUri, to: destUri });
-      }
+      // bridge copy: tmp file -> our dest file
+      await FSLegacy.copyAsync({ from: tmpUri, to: destFile.uri });
 
-      const entry: SavedDrawing = { id: filename, uri: destUri, createdAt: Date.now() };
+      const entry: SavedDrawing = { id: filename, uri: destFile.uri, createdAt: Date.now() };
       const next = [entry, ...saved];
       setSaved(next);
       await saveDrawings(next);
@@ -127,15 +107,8 @@ export default function DrawingScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            const fs = await getFS();
-            if (fs.kind === "modern") {
-              // Modern: delete by name inside drawings directory
-              const drawingsDir = await ensureDrawingsDir(fs);
-              await deleteFile(fs, drawingsDir, item.id);
-            } else {
-              // Legacy: delete by full URI
-              try { await (FileSystemLegacy as any).deleteAsync(item.uri, { idempotent: true }); } catch {}
-            }
+            const file = new File(drawingsDir, item.id);
+            if (file.exists) file.delete(); // modern delete
             const next = saved.filter(x => x.id !== item.id);
             setSaved(next);
             await saveDrawings(next);
@@ -158,34 +131,17 @@ export default function DrawingScreen() {
           style={styles.canvasShot}
           options={{ format: "png", quality: 1, result: "tmpfile" }}
         >
-          <PanGestureHandler
-            onGestureEvent={onGestureEvent}
-            onHandlerStateChange={onHandlerStateChange}
-            minDist={0}
-          >
+          <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange} minDist={0}>
             <View style={styles.canvas}>
               <Svg style={StyleSheet.absoluteFill}>
                 <Rect x={0} y={0} width="100%" height="100%" fill="#ffffff" />
                 {strokes.map((s, idx) => (
-                  <Path
-                    key={idx}
-                    d={toSvgPath(s.points)}
-                    stroke={s.color}
-                    strokeWidth={s.width}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
+                  <Path key={idx} d={toSvgPath(s.points)} stroke={s.color} strokeWidth={s.width}
+                        strokeLinejoin="round" strokeLinecap="round" fill="none" />
                 ))}
                 {draft && (
-                  <Path
-                    d={draftPath}
-                    stroke={draft.color}
-                    strokeWidth={draft.width}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
+                  <Path d={draftPath} stroke={draft.color} strokeWidth={draft.width}
+                        strokeLinejoin="round" strokeLinecap="round" fill="none" />
                 )}
               </Svg>
             </View>
@@ -198,24 +154,15 @@ export default function DrawingScreen() {
         <View style={styles.row}>
           <Text style={styles.label}>Pen</Text>
           {colors.map(c => (
-            <TouchableOpacity
-              key={c}
-              onPress={() => setBrushColor(c)}
-              style={[
-                styles.swatch,
-                { backgroundColor: c, borderWidth: brushColor === c ? 2 : 1 },
-              ]}
-            />
+            <TouchableOpacity key={c} onPress={() => setBrushColor(c)}
+                              style={[styles.swatch, { backgroundColor: c, borderWidth: brushColor === c ? 2 : 1 }]} />
           ))}
         </View>
         <View style={styles.row}>
           <Text style={styles.label}>Width</Text>
           {widths.map(w => (
-            <TouchableOpacity
-              key={w}
-              onPress={() => setBrushWidth(w)}
-              style={[styles.widthBtn, brushWidth === w && styles.widthBtnActive]}
-            >
+            <TouchableOpacity key={w} onPress={() => setBrushWidth(w)}
+                              style={[styles.widthBtn, brushWidth === w && styles.widthBtnActive]}>
               <View style={{ width: w * 2, height: w, backgroundColor: brushColor, borderRadius: 999 }} />
             </TouchableOpacity>
           ))}
@@ -245,9 +192,7 @@ export default function DrawingScreen() {
               </TouchableOpacity>
             </View>
           )}
-          ListEmptyComponent={
-            <Text style={styles.empty}>Nothing saved yet. Tap “Save” to add your first doodle.</Text>
-          }
+          ListEmptyComponent={<Text style={styles.empty}>Nothing saved yet. Tap “Save”.</Text>}
         />
       </View>
     </GestureHandlerRootView>
@@ -276,10 +221,7 @@ const styles = StyleSheet.create({
   },
   widthBtnActive: { borderColor: "#111" },
 
-  actionBtn: {
-    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
-    backgroundColor: "#f1f5f9", marginLeft: 6,
-  },
+  actionBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: "#f1f5f9", marginLeft: 6 },
   saveBtn: { backgroundColor: "#dbeafe" },
   actionText: { color: "#111" },
 
@@ -289,7 +231,7 @@ const styles = StyleSheet.create({
   thumb: { flex: 1, borderRadius: 8, backgroundColor: "#fff" },
   deleteBadge: {
     position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: 12,
-    alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.55)"
   },
   deleteText: { color: "white", fontSize: 14, lineHeight: 16 },
   empty: { textAlign: "center", color: "#64748b", padding: 16 },

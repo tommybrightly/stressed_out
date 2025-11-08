@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Message, StressEntry } from "../types";
 import * as FileSystem from "expo-file-system";
 import { getFS, ensureDrawingsDir, readTextFile, writeTextFile } from "./fsCompat";
+import { Directory, File, Paths } from "expo-file-system";
 
 
 const MSG_KEY = "@calmsketch/messages";
@@ -12,21 +13,17 @@ export type SavedDrawing = { id: string; uri: string; createdAt: number };
 
 const INDEX_NAME = "drawings.v1.json";
 
-const FS_ANY: any = FileSystem; // TS-safe shim for older typings
-const BASE_DIR: string =
-(FS_ANY.documentDirectory as string | undefined) ??
-(FS_ANY.cacheDirectory as string | undefined) ??
-  "";
-const DRAWINGS_JSON = `${BASE_DIR}drawings.v1.json`;
+const drawingsDir = new Directory(Paths.document, "drawings");
+if (!drawingsDir.exists) drawingsDir.create();
+
+const indexFile = new File(drawingsDir, "drawings.v1.json");
 
 
-  export async function loadDrawings(): Promise<SavedDrawing[]> {
-    const fs = await getFS();
-    const drawingsDir = await ensureDrawingsDir(fs);
-  
-    const text = await readTextFile(fs, drawingsDir, INDEX_NAME);
-    if (!text) return [];
+export async function loadDrawings(): Promise<SavedDrawing[]> {
     try {
+      if (!drawingsDir.exists) drawingsDir.create();
+      if (!indexFile.exists) return [];
+      const text = await indexFile.text();                 // <-- add await
       const parsed = JSON.parse(text);
       return Array.isArray(parsed) ? (parsed as SavedDrawing[]) : [];
     } catch {
@@ -35,9 +32,12 @@ const DRAWINGS_JSON = `${BASE_DIR}drawings.v1.json`;
   }
 
   export async function saveDrawings(all: SavedDrawing[]) {
-    const fs = await getFS();
-    const drawingsDir = await ensureDrawingsDir(fs);
-    await writeTextFile(fs, drawingsDir, INDEX_NAME, JSON.stringify(all));
+    try {
+      if (!drawingsDir.exists) drawingsDir.create();
+      indexFile.write(JSON.stringify(all)); // modern API: sync write
+    } catch {
+      // ignore persistence errors
+    }
   }
 
 export async function loadMessages(): Promise<Message[]> {
