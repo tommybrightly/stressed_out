@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   FlatList,
   Platform,
   StyleSheet,
@@ -31,9 +30,34 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/* ---------- Blue Send Button ---------- */
+function SendButton({
+  title,
+  onPress,
+  disabled,
+}: {
+  title: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.8}
+      style={[
+        styles.sendBtn,
+        disabled ? styles.sendBtnDisabled : styles.sendBtnEnabled,
+      ]}
+    >
+      <Text style={styles.sendBtnText}>{title}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const keyboardInset = useKeyboardInset(); // keyboard height in px
+  const keyboardInset = useKeyboardInset(); // returns keyboard overlap in px (0 if hidden)
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
@@ -113,7 +137,7 @@ export default function HomeScreen() {
     setText("");
     await saveMessages(next);
 
-    // 2) auto-log emotion from the user message (no need to ask them)
+    // 2) auto-log emotion from the user message
     try {
       const h = classifyEmotionHeuristic(trimmed);
       await appendEmotionEvent({
@@ -122,23 +146,14 @@ export default function HomeScreen() {
         confidence: h.confidence,
         at: Date.now(),
         sample: trimmed.slice(0, 120),
-        // messageId: userMsg.id, // uncomment if you want to link back
       });
-      // If you want to escalate to LLM when low confidence:
-      // if (h.confidence < 0.55) {
-      //   const llm = await classifyEmotionLLM(trimmed);
-      //   if (llm) {
-      //     await appendEmotionEvent({ id: uid(), ...llm, at: Date.now(), sample: trimmed.slice(0,120), messageId: userMsg.id });
-      //   }
-      // }
     } catch {
-      // soft-fail, don’t block chat
+      // soft-fail
     }
 
     // 3) call assistant
     setLoading(true);
     try {
-      // pass prior "stress" mood if it exists (kept from your original code)
       type StressCarrier = Message & { stress: number };
       const lastStressCarrier = [...next]
         .filter((m) => m.createdAt >= sessionStart)
@@ -168,7 +183,6 @@ export default function HomeScreen() {
         sender: "assistant",
         createdAt: Date.now(),
       };
-      // important: base failure append on `next`, not the stale `messages`
       const finalList = [...next, failMsg];
       setMessages(finalList);
       await saveMessages(finalList);
@@ -179,8 +193,13 @@ export default function HomeScreen() {
 
   const sessionMessages = messages.filter((m) => m.createdAt >= sessionStart);
 
-  // The vertical shift we want under the input bar
-  const bottomLift = keyboardInset + Math.max(insets.bottom, 8);
+  /* ---------------- Exact placement above keyboard ----------------
+     When the keyboard is OPEN, position the bar exactly by keyboardInset.
+     When CLOSED, use safe-area bottom (or a small minimum).
+     This avoids the previous "too high" double-offset.
+  -----------------------------------------------------------------*/
+  const safeBottom = Math.max(insets.bottom, 8);
+  const bottomLift = keyboardInset > 0 ? keyboardInset : safeBottom;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }} edges={["top", "bottom"]}>
@@ -211,7 +230,6 @@ export default function HomeScreen() {
             paddingBottom: inputBarHeight + bottomLift + 12,
           }}
           onContentSizeChange={() => {
-            // auto-scroll to bottom on new content
             requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
           }}
         />
@@ -222,7 +240,7 @@ export default function HomeScreen() {
           style={[
             styles.inputBar,
             {
-              bottom: bottomLift, // sits above the keyboard
+              bottom: bottomLift, // sits exactly atop the keyboard when open
               left: 0,
               right: 0,
             },
@@ -239,7 +257,13 @@ export default function HomeScreen() {
             blurOnSubmit={false}
             multiline
           />
-          <Button title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading || !text.trim()} />
+
+          {/* Blue send button */}
+          <SendButton
+            title={loading ? "Sending..." : "Send"}
+            onPress={send}
+            disabled={loading || !text.trim()}
+          />
         </View>
       </View>
     </SafeAreaView>
@@ -283,5 +307,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: Platform.select({ ios: 12, android: 10 }),
     maxHeight: 120,
+  },
+
+  /* Send button styles */
+  sendBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.select({ ios: 10, android: 8 }),
+    minWidth: 74,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendBtnEnabled: {
+    backgroundColor: "#2563eb", // blue-600
+  },
+  sendBtnDisabled: {
+    backgroundColor: "#93c5fd", // blue-300
+  },
+  sendBtnText: {
+    color: "white",
+    fontWeight: "700",
   },
 });
