@@ -9,14 +9,6 @@ import { View, Text } from "react-native";
 const Tab = createBottomTabNavigator();
 
 
-function Dummy() {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text>Boot OK</Text>
-      </View>
-    );
-  }
-  
 
 export default function Tabs() {
 return (
@@ -37,13 +29,7 @@ options={{
 tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="brush-outline" color={color} size={size} />
 }}
 />
-<Tab.Screen
-name="Metrics"
-component={MetricsScreen}
-options={{
-tabBarIcon: ({ color, size }: { color: string; size: number }) => <Ionicons name="stats-chart-outline" color={color} size={size} />
-}}
-/>
+<Tab.Screen name="Metrics" component={MetricsScreen} />
 </Tab.Navigator>
 );
 }
