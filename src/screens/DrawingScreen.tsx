@@ -38,12 +38,7 @@ export default function DrawingScreen() {
   const [saved, setSaved] = useState<SavedDrawing[]>([]);
   const viewShotRef = useRef<ViewShot>(null);
 
-  // Prepare modern directories/files
-  const drawingsDir = useMemo(() => {
-    const d = new Directory(Paths.document, "drawings");
-    if (!d.exists) d.create();
-    return d;
-  }, []);
+
 
   useEffect(() => {
     (async () => {
@@ -80,21 +75,56 @@ export default function DrawingScreen() {
   const undo = () => setStrokes(prev => prev.slice(0, -1));
   const clear = () => { setDraft(null); setStrokes([]); };
 
+
+  async function getDrawingsDir(): Promise<Directory> {
+    const dir = new Directory(Paths.document, "drawings");
+  
+    const exists =
+      typeof (dir as any).exists === "function"
+        ? await (dir as any).exists()
+        : (dir as any).exists;
+  
+    if (!exists) {
+      if (typeof (dir as any).create === "function") {
+        await (dir as any).create();
+      } else if (typeof (dir as any).createAsync === "function") {
+        await (dir as any).createAsync();
+      }
+    }
+    return dir;
+  }
+
+  async function createDestFile(filename: string): Promise<File> {
+    const dir = await getDrawingsDir();
+    const file = new File(dir, filename);
+  
+    const fExists =
+      typeof (file as any).exists === "function"
+        ? await (file as any).exists()
+        : (file as any).exists;
+  
+    if (!fExists) {
+      if (typeof (file as any).create === "function") {
+        await (file as any).create();
+      } else if (typeof (file as any).createAsync === "function") {
+        await (file as any).createAsync();
+      }
+    }
+    return file;
+  }
+  
+  // update your save() to call the helpers
   const save = async () => {
     try {
       const tmpUri = await viewShotRef.current?.capture?.();
       if (!tmpUri) throw new Error("Capture failed");
-
-      // create destination File in modern API
-      const filename = `${uid()}.png`;
-      const destFile = new File(drawingsDir, filename);
-      if (!drawingsDir.exists) drawingsDir.create();
-      if (!destFile.exists) destFile.create();
-
-      // bridge copy: tmp file -> our dest file
+  
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+      const destFile = await createDestFile(filename);
+  
       await FSLegacy.copyAsync({ from: tmpUri, to: destFile.uri });
-
-      const entry: SavedDrawing = { id: filename, uri: destFile.uri, createdAt: Date.now() };
+  
+      const entry = { id: filename, uri: destFile.uri, createdAt: Date.now() };
       const next = [entry, ...saved];
       setSaved(next);
       await saveDrawings(next);
@@ -103,7 +133,8 @@ export default function DrawingScreen() {
     }
   };
 
-  const onDeleteOne = async (item: SavedDrawing) => {
+// update delete handler to fetch the dir lazily too
+const onDeleteOne = async (item: SavedDrawing) => {
     Alert.alert("Delete drawing?", "This will remove the image from your device.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -111,8 +142,9 @@ export default function DrawingScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            const file = new File(drawingsDir, item.id);
-            if (file.exists) file.delete(); // modern delete
+            const dir = await getDrawingsDir();
+            const file = new File(dir, item.id);
+            if (file.exists) file.delete();
             const next = saved.filter(x => x.id !== item.id);
             setSaved(next);
             await saveDrawings(next);
