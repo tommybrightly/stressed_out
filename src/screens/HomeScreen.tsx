@@ -42,12 +42,29 @@ export default function HomeScreen() {
   const [inputBarHeight, setInputBarHeight] = useState(56);
   const [sessionStart, setSessionStart] = useState<number>(() => Date.now());
   const listRef = useRef<FlatList<Message>>(null);
+  
+
+  const scrollToBottom = () => {
+    // 1st pass (after layout), 2nd pass to catch async layout
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 60);
+  };
+  
 
   useEffect(() => { (async () => setMessages(await loadMessages()))(); }, []);
   useEffect(() => { requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); }, [messages.length]);
   useEffect(() => { if (keyboardInset > 0) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); }, [keyboardInset]);
 
+  //ensure keyboard doesn't make messages visually go back up
+  useEffect(() => {
+    if (keyboardInset > 0) scrollToBottom();
+  }, [keyboardInset]);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length]);
+
   function startNewSession() { setSessionStart(Date.now()); }
+  
 
   function toChatMsgs(ms: Message[]): ChatMsg[] {
     const system: ChatMsg = { role: "system", content: "You are a concise, supportive companion. Be validating, practical, and brief." };
@@ -67,6 +84,7 @@ export default function HomeScreen() {
     setMessages(next);
     setText("");
     await saveMessages(next);
+    scrollToBottom(); 
 
     try {
       const h = classifyEmotionHeuristic(trimmed);
@@ -80,12 +98,14 @@ export default function HomeScreen() {
       const finalList = [...next, aiMsg];
       setMessages(finalList);
       await saveMessages(finalList);
+      scrollToBottom();
     } catch (e: any) {
       setErrorText(String(e?.message || e));
       const failMsg: Message = { id: uid(), text: FALLBACK, sender: "assistant", createdAt: Date.now() };
       const finalList = [...next, failMsg];
       setMessages(finalList);
       await saveMessages(finalList);
+      scrollToBottom();  
     } finally {
       setLoading(false);
     }
@@ -94,6 +114,7 @@ export default function HomeScreen() {
   const sessionMessages = messages.filter(m => m.createdAt >= sessionStart);
   const safeBottom = Math.max(insets.bottom, 8);
   const bottomLift = keyboardInset > 0 ? keyboardInset : safeBottom;
+  const footerSpacerHeight = inputBarHeight + bottomLift + 12;
 
   return (
     <Screen>
@@ -114,7 +135,10 @@ export default function HomeScreen() {
         renderItem={({ item }) => <ChatMessage msg={item} />}
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: inputBarHeight + bottomLift + 12 }}
+        contentContainerStyle={{ paddingTop: 6 }}
+        // footer spacer ensures full visibility of last message
+        ListFooterComponent={<View style={{ height: footerSpacerHeight }} />}
+        onContentSizeChange={scrollToBottom}
       />
 
       {/* Opaque underlay so bubbles don't show through when bar is raised */}
