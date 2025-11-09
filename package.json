@@ -8,6 +8,7 @@
     "babel-preset-expo": "~54.0.0",
     "expo": "~54.0.0",
     "expo-file-system": "~19.0.17",
+    "expo-linear-gradient": "~15.0.7",
     "expo-status-bar": "~3.0.8",
     "expo-vector-icons": "^10.0.1",
     "next": "^16.0.1",

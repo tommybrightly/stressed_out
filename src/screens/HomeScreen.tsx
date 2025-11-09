@@ -1,54 +1,29 @@
-// src/screens/HomeScreen.tsx
 import { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  FlatList,
-  Platform,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
+  View, Text, TextInput, FlatList, Platform, StyleSheet, ActivityIndicator, TouchableOpacity,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Screen from "../components/Screen";
 import ChatMessage from "../../src/components/ChatMessage";
 import { Message } from "../types";
 import { chatWithAI, ChatMsg } from "../lib/ai";
 import { loadMessages, saveMessages, logStress } from "../../src/storage/storage";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
-
-import {
-  classifyEmotionHeuristic /* , classifyEmotionLLM */,
-} from "../emotion/classifyEmotion";
+import { classifyEmotionHeuristic } from "../emotion/classifyEmotion";
 import { appendEmotionEvent } from "../storage/emotions";
+import { colors as theme } from "../theme/colors";
+import { shadowTray } from "../theme/shadow";
 
-const FALLBACK =
-  "I hit a snag talking to the server. Mind trying again in a moment?";
+const FALLBACK = "I hit a snag talking to the server. Mind trying again in a moment?";
+const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-// uid
-function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-/* ---------- Blue Send Button ---------- */
-function SendButton({
-  title,
-  onPress,
-  disabled,
-}: {
-  title: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
+function SendButton({ title, onPress, disabled }: { title: string; onPress: () => void; disabled?: boolean }) {
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      activeOpacity={0.8}
-      style={[
-        styles.sendBtn,
-        disabled ? styles.sendBtnDisabled : styles.sendBtnEnabled,
-      ]}
+      activeOpacity={0.85}
+      style={[styles.sendBtn, disabled ? styles.sendBtnDisabled : styles.sendBtnEnabled]}
     >
       <Text style={styles.sendBtnText}>{title}</Text>
     </TouchableOpacity>
@@ -57,77 +32,28 @@ function SendButton({
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const keyboardInset = useKeyboardInset(); // returns keyboard overlap in px (0 if hidden)
+  const keyboardInset = useKeyboardInset();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [inputBarHeight, setInputBarHeight] = useState(56);
-
   const [sessionStart, setSessionStart] = useState<number>(() => Date.now());
-  const lastUserMsgId = useRef<string | null>(null);
-
   const listRef = useRef<FlatList<Message>>(null);
 
-  useEffect(() => {
-    (async () => {
-      const initial = await loadMessages();
-      setMessages(initial);
-    })();
-  }, []);
+  useEffect(() => { (async () => setMessages(await loadMessages()))(); }, []);
+  useEffect(() => { requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); }, [messages.length]);
+  useEffect(() => { if (keyboardInset > 0) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true })); }, [keyboardInset]);
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-  }, [messages.length]);
-
-  // Also scroll when the keyboard opens (helps keep the latest message visible)
-  useEffect(() => {
-  if (keyboardInset > 0) {
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-  }
-}, [keyboardInset]);
-
-  function startNewSession() {
-    setSessionStart(Date.now());
-  }
+  function startNewSession() { setSessionStart(Date.now()); }
 
   function toChatMsgs(ms: Message[]): ChatMsg[] {
-    const system: ChatMsg = {
-      role: "system",
-      content:
-        "You are a concise, supportive companion. Be validating, practical, and brief.",
-    };
-    const rest: ChatMsg[] = ms
-      .filter((m) => m.createdAt >= sessionStart)
-      .filter((m) => !(m.sender === "assistant" && m.text === FALLBACK))
-      .map<ChatMsg>((m) => ({
-        role: m.sender === "assistant" ? "assistant" : "user",
-        content: m.text,
-      }));
+    const system: ChatMsg = { role: "system", content: "You are a concise, supportive companion. Be validating, practical, and brief." };
+    const rest: ChatMsg[] = ms.filter(m => m.createdAt >= sessionStart)
+      .filter(m => !(m.sender === "assistant" && m.text === FALLBACK))
+      .map(m => ({ role: m.sender === "assistant" ? "assistant" : "user", content: m.text }));
     return [system, ...rest.slice(-12)];
-  }
-
-  // Optional helper if you still use explicit stress logging somewhere else
-  async function attachStress({ stress, tags }: { stress: number; tags: string[] }) {
-    if (!messages.length) return;
-    const idxFromEnd = [...messages].reverse().findIndex((m) => m.sender === "user");
-    const realIdx = idxFromEnd === -1 ? -1 : messages.length - 1 - idxFromEnd;
-    if (realIdx < 0) return;
-
-    const copy = [...messages];
-    copy[realIdx] = { ...copy[realIdx], stress, tags };
-    setMessages(copy);
-    await saveMessages(copy);
-
-    await logStress({
-      id: uid(),
-      createdAt: Date.now(),
-      stress,
-      tags,
-      note: copy[realIdx].text,
-    });
   }
 
   async function send() {
@@ -135,66 +61,27 @@ export default function HomeScreen() {
     if (!trimmed || loading) return;
     setErrorText(null);
 
-    const userMsg: Message = {
-      id: uid(),
-      text: trimmed,
-      sender: "user",
-      createdAt: Date.now(),
-    };
-    lastUserMsgId.current = userMsg.id;
-
-    // 1) optimistic UI
+    const userMsg: Message = { id: uid(), text: trimmed, sender: "user", createdAt: Date.now() };
     const next = [...messages, userMsg];
     setMessages(next);
     setText("");
     await saveMessages(next);
 
-    // 2) auto-log emotion from the user message
     try {
       const h = classifyEmotionHeuristic(trimmed);
-      await appendEmotionEvent({
-        id: uid(),
-        category: h.category,
-        confidence: h.confidence,
-        at: Date.now(),
-        sample: trimmed.slice(0, 120),
-      });
-    } catch {
-      // soft-fail
-    }
+      await appendEmotionEvent({ id: uid(), category: h.category, confidence: h.confidence, at: Date.now(), sample: trimmed.slice(0, 120) });
+    } catch {}
 
-    // 3) call assistant
     setLoading(true);
     try {
-      type StressCarrier = Message & { stress: number };
-      const lastStressCarrier = [...next]
-        .filter((m) => m.createdAt >= sessionStart)
-        .reverse()
-        .find(
-          (m): m is StressCarrier =>
-            m.sender === "user" && typeof (m as Record<string, unknown>).stress === "number"
-        );
-      const mood = lastStressCarrier?.stress;
-
-      const reply = await chatWithAI(toChatMsgs(next), mood);
-
-      const aiMsg: Message = {
-        id: uid(),
-        text: reply,
-        sender: "assistant",
-        createdAt: Date.now(),
-      };
+      const reply = await chatWithAI(toChatMsgs(next), undefined);
+      const aiMsg: Message = { id: uid(), text: reply, sender: "assistant", createdAt: Date.now() };
       const finalList = [...next, aiMsg];
       setMessages(finalList);
       await saveMessages(finalList);
     } catch (e: any) {
       setErrorText(String(e?.message || e));
-      const failMsg: Message = {
-        id: uid(),
-        text: FALLBACK,
-        sender: "assistant",
-        createdAt: Date.now(),
-      };
+      const failMsg: Message = { id: uid(), text: FALLBACK, sender: "assistant", createdAt: Date.now() };
       const finalList = [...next, failMsg];
       setMessages(finalList);
       await saveMessages(finalList);
@@ -203,170 +90,83 @@ export default function HomeScreen() {
     }
   }
 
-  const sessionMessages = messages.filter((m) => m.createdAt >= sessionStart);
-
-  /* ---------------- Exact placement above keyboard ----------------
-     When the keyboard is OPEN, position the bar exactly by keyboardInset.
-     When CLOSED, use safe-area bottom (or a small minimum).
-     This avoids the previous "too high" double-offset.
-  -----------------------------------------------------------------*/
+  const sessionMessages = messages.filter(m => m.createdAt >= sessionStart);
   const safeBottom = Math.max(insets.bottom, 8);
   const bottomLift = keyboardInset > 0 ? keyboardInset : safeBottom;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "white" }} edges={["top", "bottom"]}>
-      <View style={styles.container}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>Stress Less — Chat</Text>
-          <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
-            <Text style={styles.newSessionText}>New Session</Text>
-          </TouchableOpacity>
-        </View>
-
-        {!!errorText && <Text style={{ color: "crimson", marginBottom: 6 }}>{errorText}</Text>}
-        {loading && (
-          <View style={{ paddingVertical: 6 }}>
-            <ActivityIndicator />
-          </View>
-        )}
-
-        <FlatList
-          ref={listRef}
-          data={sessionMessages}
-          keyExtractor={(m) => m.id}
-          renderItem={({ item }) => <ChatMessage msg={item} />}
-          style={{ flex: 1 }}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            // keep the last message above the floating input bar
-            paddingBottom: inputBarHeight + bottomLift + 12,
-          }}
-          onContentSizeChange={() => {
-            requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-          }}
-        />
-
-
-          {/* Opaque underlay to prevent chat bubbles showing through when raised */}
-          <View
-            pointerEvents="none"
-            style={[
-              styles.inputUnderlay,
-              { height: bottomLift + inputBarHeight }, // covers from bottom to top of bar
-            ]}
-          />
-
-        {/* Floating input bar */}
-        <View
-          onLayout={(e) => setInputBarHeight(e.nativeEvent.layout.height)}
-          style={[
-            styles.inputBar,
-            {
-              bottom: bottomLift, // sits exactly atop the keyboard when open
-              left: 0,
-              right: 0,
-            },
-          ]}
-        >
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            placeholder="Tell me what's on your mind..."
-            onSubmitEditing={send}
-            returnKeyType="send"
-            editable={!loading}
-            blurOnSubmit={false}
-            multiline
-          />
-
-          {/* Blue send button */}
-          <SendButton
-            title={loading ? "Sending..." : "Send"}
-            onPress={send}
-            disabled={loading || !text.trim()}
-          />
-        </View>
+    <Screen>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>🌤 Stress Less</Text>
+        <TouchableOpacity onPress={startNewSession} style={styles.newSessionBtn}>
+          <Text style={styles.newSessionText}>New Session</Text>
+        </TouchableOpacity>
       </View>
-    </SafeAreaView>
+
+      {!!errorText && <Text style={{ color: "#B91C1C", marginBottom: 6 }}>{errorText}</Text>}
+      {loading && <View style={{ paddingVertical: 6 }}><ActivityIndicator /></View>}
+
+      <FlatList
+        ref={listRef}
+        data={sessionMessages}
+        keyExtractor={(m) => m.id}
+        renderItem={({ item }) => <ChatMessage msg={item} />}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: inputBarHeight + bottomLift + 12 }}
+      />
+
+      {/* Opaque underlay so bubbles don't show through when bar is raised */}
+      <View pointerEvents="none" style={[styles.inputUnderlay, { height: bottomLift + inputBarHeight }]} />
+
+      {/* Floating input bar */}
+      <View
+        onLayout={(e) => setInputBarHeight(e.nativeEvent.layout.height)}
+        style={[styles.inputBar, shadowTray, { bottom: bottomLift, left: 0, right: 0 }]}
+      >
+        <TextInput
+          style={styles.input}
+          value={text}
+          onChangeText={setText}
+          placeholder="Tell me what's on your mind..."
+          placeholderTextColor={theme.textSubtle}
+          onSubmitEditing={send}
+          returnKeyType="send"
+          editable={!loading}
+          blurOnSubmit={false}
+          multiline
+        />
+        <SendButton title={loading ? "Sending..." : "Send"} onPress={send} disabled={loading || !text.trim()} />
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
   headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8,
   },
-  title: { fontSize: 20, fontWeight: "700" },
+  title: { fontSize: 22, fontWeight: "700", color: theme.text },
   newSessionBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#eee",
-    borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 8, backgroundColor: theme.cream, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.line,
   },
-  newSessionText: { fontSize: 12, fontWeight: "600", color: "#333" },
+  newSessionText: { fontSize: 12, fontWeight: "700", color: theme.text },
 
   inputUnderlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "white",   // <- key: makes it fully opaque
-    // optional: a slight top border to separate
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#e5e7eb",
-    zIndex: 1, // sits beneath the input bar (which has higher z)
+    position: "absolute", left: 0, right: 0, bottom: 0,
+    backgroundColor: theme.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.line, zIndex: 1,
   },
-
   inputBar: {
-    position: "absolute",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: "white",    // solid bg so nothing shows through
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#e5e7eb",
-    // subtle elevation/shadow so it looks like a proper tray
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: -2 },
-    shadowRadius: 6,
-    elevation: 6,
-    zIndex: 2,                   // on top of the underlay
+    position: "absolute", flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8,
+    backgroundColor: theme.white, borderTopLeftRadius: 16, borderTopRightRadius: 16, zIndex: 2,
   },
   input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#CCC",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.select({ ios: 12, android: 10 }),
-    maxHeight: 120,
+    flex: 1, borderWidth: 1, borderColor: theme.line, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: Platform.select({ ios: 12, android: 10 }), maxHeight: 120, backgroundColor: theme.white, color: theme.text,
   },
-
-  /* Send button styles */
-  sendBtn: {
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.select({ ios: 10, android: 8 }),
-    minWidth: 74,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sendBtnEnabled: {
-    backgroundColor: "#2563eb", // blue-600
-  },
-  sendBtnDisabled: {
-    backgroundColor: "#93c5fd", // blue-300
-  },
-  sendBtnText: {
-    color: "white",
-    fontWeight: "700",
-  },
+  sendBtn: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: Platform.select({ ios: 10, android: 8 }), minWidth: 74, alignItems: "center", justifyContent: "center" },
+  sendBtnEnabled: { backgroundColor: theme.primary },
+  sendBtnDisabled: { backgroundColor: "#BFDDEF" },
+  sendBtnText: { color: theme.white, fontWeight: "700" },
 });

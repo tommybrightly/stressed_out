@@ -1,28 +1,36 @@
 // src/components/ChatMessage.tsx
+import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { colors } from "../theme/colors";
 
-
-
-
-export default function ChatMessage({ msg }: { msg: { text: string; createdAt: number; sender: "user" | "assistant"; stress?: number; tags?: string[] } }) {
+export default function ChatMessage({ msg }: { msg: { sender: "user" | "assistant"; text: string } }) {
   const isUser = msg.sender === "user";
   return (
-    <View style={[styles.bubble, isUser ? styles.user : styles.ai]}>
-      <Text style={styles.text}>{msg.text}</Text>
-      <Text style={styles.meta}>
-        {new Date(msg.createdAt).toLocaleTimeString()}
-        {msg.stress ? ` · stress ${msg.stress}` : ""}
-        {msg.tags?.length ? ` · ${msg.tags.join(", ")}` : ""}
-      </Text>
+    <View style={[styles.row, isUser ? { justifyContent: "flex-end" } : { justifyContent: "flex-start" }]}>
+      <View style={[styles.bubble, isUser ? styles.user : styles.assistant]}>
+        <Text style={[styles.text, isUser ? styles.userText : styles.assistantText]}>{msg.text}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bubble: { marginVertical: 6, padding: 12, borderRadius: 12, maxWidth: "88%" },
-  user: { alignSelf: "flex-end", backgroundColor: "#DCF8C6" },
-  ai: { alignSelf: "flex-start", backgroundColor: "#EEE" },
-  text: { fontSize: 16 },
-  meta: { fontSize: 11, opacity: 0.6, marginTop: 6 },
+  row: { width: "100%", marginBottom: 8, flexDirection: "row" },
+  bubble: {
+    maxWidth: "80%",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+  },
+  user: {
+    backgroundColor: colors.userBubble,
+    borderBottomRightRadius: 6,
+  },
+  assistant: {
+    backgroundColor: colors.assistantBubble,
+    borderBottomLeftRadius: 6,
+  },
+  text: { fontSize: 16, lineHeight: 22 },
+  userText: { color: "#083344" },       // deep teal on blue
+  assistantText: { color: colors.text }, // warm dark gray
 });
-

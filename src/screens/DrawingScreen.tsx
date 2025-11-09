@@ -18,6 +18,9 @@ import {
 } from "react-native-gesture-handler";
 import Svg, { Path, Rect } from "react-native-svg";
 import ViewShot from "react-native-view-shot";
+import Screen from "../components/Screen";
+import { shadowCard, shadowTray } from "../theme/shadow";
+import { colors as theme } from "../theme/colors";
 
 // Modern FS API classes
 import { Directory, File, Paths } from "expo-file-system";
@@ -174,6 +177,7 @@ export default function DrawingScreen() {
   const draftPath = useMemo(() => (draft ? toSvgPath(draft.points) : ""), [draft]);
 
   return (
+    <Screen>
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#f8fafc" }}>
       {/* Canvas ~half */}
       <View style={styles.canvasBlock}>
@@ -320,6 +324,7 @@ export default function DrawingScreen() {
         </View>
       </Modal>
     </GestureHandlerRootView>
+    </Screen>
   );
 }
 
@@ -329,11 +334,13 @@ const styles = StyleSheet.create({
   canvas: { flex: 1, backgroundColor: "#ffffff" },
 
   toolbar: {
-    backgroundColor: "white",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#e5e7eb",
+    backgroundColor: theme.white,
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.line,
   },
   row: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   label: { fontWeight: "600", marginRight: 6 },
@@ -359,29 +366,21 @@ const styles = StyleSheet.create({
   saveBtn: { backgroundColor: "#dbeafe" },
   actionText: { color: "#111" },
 
-  galleryBlock: { flex: 1, backgroundColor: "#f8fafc" },
-  galleryTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
+  galleryBlock: { backgroundColor: "transparent" },
+  galleryTitle: { fontSize: 16, fontWeight: "700", color: theme.text, paddingHorizontal: 4, paddingBottom: 6 },
   thumbWrap: { width: "33.333%", aspectRatio: 1, padding: 6 },
-  thumb: { width: "100%", height: "100%", borderRadius: 8, backgroundColor: "#fff" },
-
-  deleteBadge: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    width: 24,
-    height: 24,
+  thumbCard: {
+    flex: 1,
+    backgroundColor: theme.white,
     borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.line,
+    ...shadowCard,
   },
-  deleteText: { color: "white", fontSize: 14, lineHeight: 16 },
+  thumb: { width: "100%", height: "100%" },
+  deleteBadge: { position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.55)" },
+  deleteText: { color: theme.white, fontSize: 14, lineHeight: 16 },
 
   empty: { textAlign: "center", color: "#64748b", padding: 16 },
 

@@ -6,6 +6,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: "Stress Less",
   slug: "StressLess",
   scheme: "stressless",
+  owner: "tommybrightly",
   ios: {
     ...config.ios,
     bundleIdentifier: "com.tommybrightly.stressless",
@@ -22,4 +23,5 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       projectId: "39d3af39-1bb1-401c-94bb-50a203935ce0", // <- REQUIRED
     },
   },
+  
 });
