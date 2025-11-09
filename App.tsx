@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
+import OnboardingNotice from "@/components/OnboardingNotice";
 
 import Tabs from "src/navigation/tabs";
 
@@ -14,6 +15,7 @@ export default function App() {
       <SafeAreaProvider>
         <NavigationContainer>
           <Tabs />
+          <OnboardingNotice />
           <StatusBar style="auto" />
         </NavigationContainer>
       </SafeAreaProvider>
