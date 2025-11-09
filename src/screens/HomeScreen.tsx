@@ -22,8 +22,9 @@ function SendButton({ title, onPress, disabled }: { title: string; onPress: () =
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      activeOpacity={0.85}
-      style={[styles.sendBtn, disabled ? styles.sendBtnDisabled : styles.sendBtnEnabled]}
+      activeOpacity={1}
+      // style={[styles.sendBtn, disabled ? styles.sendBtnDisabled : styles.sendBtnEnabled]}
+      style={[styles.sendBtn, styles.sendBtnEnabled]} //always keep dark blue color
     >
       <Text style={styles.sendBtnText}>{title}</Text>
     </TouchableOpacity>

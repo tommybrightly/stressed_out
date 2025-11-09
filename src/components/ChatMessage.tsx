@@ -23,14 +23,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   user: {
-    backgroundColor: colors.userBubble,
-    borderBottomRightRadius: 6,
-  },
+        backgroundColor: colors.userBubble, // #007AFF
+        borderBottomRightRadius: 6,
+      },
   assistant: {
     backgroundColor: colors.assistantBubble,
     borderBottomLeftRadius: 6,
   },
   text: { fontSize: 16, lineHeight: 22 },
-  userText: { color: "#083344" },       // deep teal on blue
+  userText: { color: "#FFFFFF" },       // white on blue
   assistantText: { color: colors.text }, // warm dark gray
 });

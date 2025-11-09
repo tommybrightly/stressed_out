@@ -1,7 +1,7 @@
 // src/theme/colors.ts
 export const colors = {
     // palette
-    primary: "#7BB8E1",     // soft sky blue
+    primary: "#007AFF",     // soft sky blue
     primaryDeep: "#5BA2D4",
     cream: "#F3EDE4",       // warm beige
     bgTop: "#EAF4FA",       // gradient top
@@ -11,7 +11,7 @@ export const colors = {
     white: "#FFFFFF",
   
     // chat bubbles
-    userBubble: "#7BB8E1",
+    userBubble: "#007AFF",
     assistantBubble: "#F3EDE4",
   
     // lines
