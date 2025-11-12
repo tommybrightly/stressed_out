@@ -3,7 +3,9 @@ import React from "react";
 import { View, ViewProps } from "react-native";
 import { shadow } from "./shadow";
 
-export function Card({ style, ...props }: ViewProps) {
+type CardProps = React.PropsWithChildren<ViewProps>;
+
+export function Card({ style, children, ...rest }: CardProps) {
   return (
     <View
       style={[
@@ -16,7 +18,9 @@ export function Card({ style, ...props }: ViewProps) {
         },
         style,
       ]}
-      {...props}
-    />
+      {...rest}
+    >
+      {children}
+    </View>
   );
 }
