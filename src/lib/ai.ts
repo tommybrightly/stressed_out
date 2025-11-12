@@ -7,9 +7,6 @@ export const BACKEND_URL = "https://stressed-out.vercel.app";
 export async function chatWithAI(messages: ChatMsg[], mood?: number): Promise<string> {
   const url = `${BACKEND_URL}/api/chat`;
 
-  // Temporary diagnostics
-  console.log("CHAT URL ->", url);
-  console.log("CHAT BODY ->", JSON.stringify({ messages, mood }));
 
   const res = await fetch(url, {
     method: "POST",
@@ -18,7 +15,6 @@ export async function chatWithAI(messages: ChatMsg[], mood?: number): Promise<st
   });
 
   const text = await res.text().catch(() => "");
-  console.log("CHAT STATUS ->", res.status, "BODY ->", text);
 
   if (!res.ok) throw new Error(`AI ${res.status}: ${text || "no body"}`);
 
