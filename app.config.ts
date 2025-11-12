@@ -15,6 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     ...config.android,
     package: "com.tommybrightly.stressless",
+    softwareKeyboardLayoutMode: "resize",
     versionCode: 1,
   },
   extra: {
